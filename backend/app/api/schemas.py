@@ -65,6 +65,7 @@ class EntryResponse(BaseModel):
     last_3f: float | None = None
     horse_weight: int | None = None
     horse_weight_diff: int | None = None
+    status: str = "result"
 
 
 class RaceListItem(BaseModel):

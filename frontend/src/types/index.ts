@@ -22,6 +22,7 @@ export interface EntryResponse {
     last_3f?: number;
     horse_weight?: number;
     horse_weight_diff?: number;
+    status: string;
 }
 
 export interface RaceListItem {

@@ -118,6 +118,94 @@ class ScraperService:
 
         return race
 
+    async def scrape_horse_history(self, horse_id: str) -> Horse | None:
+        """
+        馬の過去成績を収集・保存する。
+
+        Args:
+            horse_id: netkeiba の馬ID
+        """
+        logger.info("Scraping horse history for: %s", horse_id)
+        
+        html = await self._client.fetch_horse_page(horse_id)
+        from app.scraper.parser import parse_horse_page
+        parsed = parse_horse_page(html, horse_id)
+
+        # 馬を取得 or 作成
+        result = await self._session.execute(
+            select(Horse).where(Horse.horse_id == horse_id)
+        )
+        horse = result.scalar_one_or_none()
+        if not horse:
+            horse = Horse(
+                horse_id=horse_id,
+                name=parsed.name,
+                sex=parsed.sex,
+                trainer=parsed.trainer,
+                sire=parsed.sire,
+                dam=parsed.dam
+            )
+            self._session.add(horse)
+            await self._session.flush()
+        else:
+            # 情報を更新
+            horse.trainer = parsed.trainer
+            horse.sire = parsed.sire
+            horse.dam = parsed.dam
+
+        # 過去成績を保存
+        for h_entry in parsed.history:
+            # レースをチェック
+            r_result = await self._session.execute(
+                select(Race).where(Race.race_id == h_entry.race_id)
+            )
+            race = r_result.scalar_one_or_none()
+            if not race:
+                # スタブとして作成
+                race_date = datetime.strptime(h_entry.date, "%Y-%m-%d").date()
+                race = Race(
+                    race_id=h_entry.race_id,
+                    name=h_entry.race_name,
+                    date=race_date,
+                    venue=h_entry.venue,
+                    course_type=h_entry.course_type,
+                    distance=h_entry.distance,
+                    track_condition=h_entry.track_condition,
+                    num_entries=0 # 不明だが一旦0
+                )
+                self._session.add(race)
+                await self._session.flush()
+
+            # 出走記録をチェック
+            e_result = await self._session.execute(
+                select(RaceEntry)
+                .where(RaceEntry.race_id == race.id)
+                .where(RaceEntry.horse_id == horse.id)
+            )
+            if e_result.scalar_one_or_none() is None:
+                entry = RaceEntry(
+                    race_id=race.id,
+                    horse_id=horse.id,
+                    bracket_number=h_entry.bracket_number,
+                    horse_number=h_entry.horse_number,
+                    jockey=h_entry.jockey,
+                    weight_carried=h_entry.weight_carried,
+                    odds=h_entry.odds,
+                    popularity=h_entry.popularity,
+                    finish_position=h_entry.finish_position,
+                    finish_time=h_entry.finish_time,
+                    margin=h_entry.margin,
+                    passing_order=h_entry.passing_order,
+                    last_3f=h_entry.last_3f,
+                    horse_weight=h_entry.horse_weight,
+                    horse_weight_diff=h_entry.horse_weight_diff,
+                    status=h_entry.status
+                )
+                self._session.add(entry)
+
+        await self._session.commit()
+        return horse
+
     async def _save_race(self, parsed: ParsedRacePage) -> Race:
         """パース済みデータをDBに保存する"""
         info = parsed.race_info
@@ -164,6 +252,7 @@ class ScraperService:
                 last_3f=entry_data.last_3f,
                 horse_weight=entry_data.horse_weight,
                 horse_weight_diff=entry_data.horse_weight_diff,
+                status=entry_data.status,
             )
             self._session.add(entry)
 

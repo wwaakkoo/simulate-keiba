@@ -146,6 +146,7 @@ async def get_race_detail(
             last_3f=e.last_3f,
             horse_weight=e.horse_weight,
             horse_weight_diff=e.horse_weight_diff,
+            status=e.status,
         )
         for e in sorted(race.entries, key=lambda x: x.horse_number)
     ]
@@ -205,15 +206,32 @@ async def analyze_horse_stats(
         raise HTTPException(status_code=404, detail="Horse not found")
 
     # 過去レースの出走結果を取得 (新しい順)
-    entry_stmt = (
-        select(RaceEntry)
-        .where(RaceEntry.horse_id == horse.id)
-        .join(Race)
-        .options(selectinload(RaceEntry.race))
-        .order_by(Race.date.desc())
-    )
-    entry_result = await session.execute(entry_stmt)
-    entries = entry_result.scalars().all()
+    async def _get_entries():
+        entry_stmt = (
+            select(RaceEntry)
+            .where(RaceEntry.horse_id == horse.id)
+            .join(Race)
+            .options(selectinload(RaceEntry.race))
+            .order_by(Race.date.desc())
+        )
+        entry_result = await session.execute(entry_stmt)
+        return entry_result.scalars().all()
+
+    entries = await _get_entries()
+
+    # 履歴が1件以下（現レースのみ等）の場合は、自動的にスクレイプを試みる
+    if len(entries) <= 1:
+        logger.info("Insufficient data for horse %s (%s), scraping history...", horse.horse_id, horse.name)
+        service = ScraperService(session)
+        try:
+            await service.scrape_horse_history(horse.horse_id)
+            # スクレイプ後に再取得
+            # session をリフレッシュする必要があるかもしれないが、一旦再検索で試す
+            entries = await _get_entries()
+        except Exception as e:
+            logger.warning("Failed to scrape horse history for %s: %s", horse.horse_id, str(e))
+        finally:
+            await service.close()
 
     # 脚質判定
     style = determine_running_style(entries)

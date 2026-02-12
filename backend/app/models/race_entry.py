@@ -65,6 +65,10 @@ class RaceEntry(Base):
     last_3f: Mapped[float | None] = mapped_column(
         Float, nullable=True
     )  # 上がり3F（秒）→ ラストスパートの速度変化に使用
+    
+    status: Mapped[str] = mapped_column(
+        String(20), default="result", server_default="result"
+    )  # "result", "scratched", "excluded", "dnf"
 
     # === コンディションデータ ===
 

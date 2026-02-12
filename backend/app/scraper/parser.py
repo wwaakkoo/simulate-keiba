@@ -49,6 +49,7 @@ class ParsedEntryResult:
     horse_weight_diff: int | None
     sex_age: str | None  # "牡3" etc.
     trainer: str | None
+    status: str = "result"
 
 
 @dataclass
@@ -57,6 +58,47 @@ class ParsedRacePage:
 
     race_info: ParsedRaceInfo
     entries: list[ParsedEntryResult] = field(default_factory=list)
+
+
+@dataclass
+class ParsedHorseHistoryEntry:
+    """馬のプロフィールページにある過去成績の1行"""
+
+    race_id: str
+    date: str
+    venue: str
+    race_name: str
+    horse_number: int
+    bracket_number: int | None
+    odds: float | None
+    popularity: int | None
+    finish_position: int | None
+    jockey: str
+    weight_carried: float | None
+    distance: int
+    course_type: str
+    track_condition: str
+    finish_time: str | None
+    margin: str | None
+    passing_order: str | None
+    last_3f: float | None
+    horse_weight: int | None
+    horse_weight_diff: int | None
+    status: str = "result"
+
+
+@dataclass
+class ParsedHorsePage:
+    """馬のプロフィールページのパース結果"""
+
+    horse_id: str
+    name: str
+    sex: str | None
+    age: int | None
+    trainer: str | None
+    sire: str | None
+    dam: str | None
+    history: list[ParsedHorseHistoryEntry] = field(default_factory=list)
 
 
 def parse_race_result_page(html: str, race_id: str) -> ParsedRacePage:
@@ -232,9 +274,19 @@ def _parse_result_row(row: Tag) -> ParsedEntryResult | None:
         return None
 
     try:
-        # 着順
+        # 着順とステータス
         finish_pos_text = cells[0].get_text(strip=True)
-        finish_position = _safe_int(finish_pos_text)
+        status = "result"
+        finish_position = None
+        
+        if "取" in finish_pos_text:
+            status = "scratched"
+        elif "除" in finish_pos_text:
+            status = "excluded"
+        elif "中" in finish_pos_text:
+            status = "dnf"
+        else:
+            finish_position = _safe_int(finish_pos_text)
 
         # 枠番
         bracket_number = _safe_int(cells[1].get_text(strip=True))
@@ -342,6 +394,7 @@ def _parse_result_row(row: Tag) -> ParsedEntryResult | None:
             horse_weight_diff=horse_weight_diff_val,
             sex_age=sex_age,
             trainer=trainer,
+            status=status,
         )
 
     except (ValueError, IndexError):
@@ -391,3 +444,167 @@ def parse_race_list_page(html: str) -> list[str]:
                 race_ids.append(rid)
 
     return race_ids
+
+
+def parse_horse_page(html: str, horse_id: str) -> ParsedHorsePage:
+    """
+    馬のプロフィールページ (db.netkeiba.com/horse/XXXX/) をパースする。
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    # 基本情報
+    name = ""
+    name_tag = soup.select_one(".horse_title h1")
+    if name_tag:
+        name = name_tag.get_text(strip=True)
+
+    # プロフィール詳細
+    txt_txt = soup.select_one(".db_prof_area_02 .txt_01")
+    sex = None
+    age = None
+    if txt_txt:
+        text = txt_txt.get_text(strip=True)
+        # "牡3歳 鹿毛"
+        m = re.match(r"(牡|牝|セ)(\d+)歳", text)
+        if m:
+            sex = m.group(1)
+            age = int(m.group(2))
+
+    trainer = ""
+    trainer_link = soup.select_one("a[href*='/trainer/']")
+    if trainer_link:
+        trainer = trainer_link.get_text(strip=True).replace("(", "").replace(")", "")
+
+    # 血統
+    sire = ""
+    dam = ""
+    blood_table = soup.select_one(".blood_table")
+    if blood_table:
+        blood_links = blood_table.select("a")
+        if len(blood_links) >= 2:
+            sire = blood_links[0].get_text(strip=True)
+            dam = blood_links[1].get_text(strip=True)
+
+    # 過去成績
+    history: list[ParsedHorseHistoryEntry] = []
+    # db.netkeiba.com の馬ページは .db_h_race_results または table[summary="全成績"]
+    # 複数のセレクタでテーブルを探す
+    history_table = (
+        soup.select_one("table.db_h_race_results") or 
+        soup.find("table", class_="db_h_race_results") or
+        soup.select_one("table[summary='全成績']")
+    )
+    
+    # 見つからない場合は、最も列数（td）が多いテーブルを探す
+    if not history_table:
+        tables = soup.find_all("table")
+        if tables:
+            history_table = max(tables, key=lambda t: len(t.find_all("td")))
+
+    if history_table:
+        rows = history_table.find_all("tr")
+        for row in rows:
+            cells = row.find_all("td")
+            if len(cells) < 10: # 大幅に緩和
+                continue
+            
+            try:
+                # レースID (通常 4番目のセルにある a タグ)
+                race_link = cells[4].select_one("a")
+                if not race_link: continue
+                rid_match = re.search(r"/race/(\d+)", race_link.get("href", ""))
+                if not rid_match: continue
+                race_id = rid_match.group(1)
+
+                date_str = cells[0].get_text(strip=True).replace("/", "-")
+                venue = cells[1].get_text(strip=True)
+                race_name = cells[4].get_text(strip=True)
+                
+                # 枠番 (6) / 馬番 (7) / 人気 (9) / 着順 (10)
+                bracket_number = _safe_int(cells[6].get_text(strip=True))
+                horse_number = _safe_int(cells[7].get_text(strip=True)) or 0
+                
+                odds = _safe_float(cells[9].get_text(strip=True))
+                pop = _safe_int(cells[8].get_text(strip=True)) # 人気とオッズが逆転している場合があるが、大体このあたり
+                
+                rank_text = cells[10].get_text(strip=True)
+                status = "result"
+                rank = None
+                if "取" in rank_text:
+                    status = "scratched"
+                elif "除" in rank_text:
+                    status = "excluded"
+                elif "中" in rank_text:
+                    status = "dnf"
+                else:
+                    rank = _safe_int(rank_text)
+                jockey = cells[12].get_text(strip=True)
+                weight = _safe_float(cells[13].get_text(strip=True))
+                
+                dist_text = cells[14].get_text(strip=True) # "芝2500"
+                dist_match = re.search(r"(芝|ダ|障)(\d+)", dist_text)
+                c_type = "芝"
+                dist_val = 0
+                if dist_match:
+                    c_type = "ダート" if dist_match.group(1) == "ダ" else "芝"
+                    dist_val = int(dist_match.group(2))
+                
+                track = cells[16].get_text(strip=True)
+                f_time = cells[18].get_text(strip=True)
+                margin = cells[19].get_text(strip=True)
+                
+                # 通過順は 21番目あたりにあることが多いが、可変なため探索
+                passing = ""
+                for idx in [21, 20, 22]:
+                    if idx < len(cells):
+                        val = cells[idx].get_text(strip=True)
+                        if re.match(r"^\d+-\d+", val):
+                            passing = val
+                            break
+                
+                last3f = _safe_float(cells[23].get_text(strip=True))
+                
+                hw_text = cells[24].get_text(strip=True) # "504(+2)"
+                hw_match = re.match(r"(\d+)\((.+)\)", hw_text)
+                hw = None
+                hw_diff = None
+                if hw_match:
+                    hw = int(hw_match.group(1))
+                    hw_diff = int(hw_match.group(2))
+
+                history.append(ParsedHorseHistoryEntry(
+                    race_id=race_id,
+                    date=date_str,
+                    venue=venue,
+                    race_name=race_name,
+                    horse_number=horse_number,
+                    bracket_number=bracket_number,
+                    odds=odds,
+                    popularity=pop,
+                    finish_position=rank,
+                    jockey=jockey,
+                    weight_carried=weight,
+                    distance=dist_val,
+                    course_type=c_type,
+                    track_condition=track,
+                    finish_time=f_time,
+                    margin=margin,
+                    passing_order=passing,
+                    last_3f=last3f,
+                    horse_weight=hw,
+                    horse_weight_diff=hw_diff,
+                    status=status,
+                ))
+            except Exception:
+                continue
+
+    return ParsedHorsePage(
+        horse_id=horse_id,
+        name=name,
+        sex=sex,
+        age=age,
+        trainer=trainer,
+        sire=sire,
+        dam=dam,
+        history=history
+    )

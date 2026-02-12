@@ -126,3 +126,9 @@ class ScraperClient:
         """
         url = f"{NETKEIBA_BASE_URL}/?pid=race_list&kaisai_date={date_str}"
         return await self.fetch_page(url)
+
+    async def fetch_horse_page(self, horse_id: str) -> str:
+        """馬のプロフィール（過去成績）ページのHTMLを取得する"""
+        # 「戦績」ページには必ず過去のレース結果テーブルが含まれる
+        url = f"{NETKEIBA_BASE_URL}/horse/result/{horse_id}/"
+        return await self.fetch_page(url)

@@ -28,6 +28,7 @@ export const RaceSimulator = () => {
   const updateLogicRef = useRef<((ticker: Ticker) => void) | null>(null);
 
   // シミュレーション結果管理
+  const [simSpeed, setSimSpeed] = useState(2); // デフォルト2倍速（完全にリアルだと長いため）
   const [simResults, setSimResults] = useState<SimResult[]>([]);
   const simResultsRef = useRef<SimResult[]>([]);
   const startTimeRef = useRef<number>(0);
@@ -176,28 +177,31 @@ export const RaceSimulator = () => {
       const targetDistance = raceDetail.distance;
       const startOffset = (totalPerimeter - (targetDistance % totalPerimeter)) % totalPerimeter;
 
-      raceDetail.entries.forEach((entry, i) => {
+      raceDetail.entries.forEach((entry) => {
+        if (entry.status !== "result") return;
+
+        const simIndex = sprites.length;
         const sprite = new HorseSprite(entry.horse_number, entry.bracket_number || 1);
         const d = startOffset % totalPerimeter;
         let x, y;
         if (d < STRAIGHT_LENGTH / 2) {
-          x = centerX - d; y = centerY + TRACK_RADIUS + (i * 5);
+          x = centerX - d; y = centerY + TRACK_RADIUS + (simIndex * 5);
         } else if (d < STRAIGHT_LENGTH / 2 + Math.PI * TRACK_RADIUS) {
           const theta = Math.PI / 2 + (d - STRAIGHT_LENGTH / 2) / TRACK_RADIUS;
-          x = (centerX - STRAIGHT_LENGTH / 2) + Math.cos(theta) * (TRACK_RADIUS + (i * 5));
-          y = centerY + Math.sin(theta) * (TRACK_RADIUS + (i * 5));
+          x = (centerX - STRAIGHT_LENGTH / 2) + Math.cos(theta) * (TRACK_RADIUS + (simIndex * 5));
+          y = centerY + Math.sin(theta) * (TRACK_RADIUS + (simIndex * 5));
         } else if (d < 1.5 * STRAIGHT_LENGTH + Math.PI * TRACK_RADIUS) {
           const d2 = d - (STRAIGHT_LENGTH / 2 + Math.PI * TRACK_RADIUS);
           x = (centerX - STRAIGHT_LENGTH / 2) + d2;
-          y = centerY - TRACK_RADIUS - (i * 5);
+          y = centerY - TRACK_RADIUS - (simIndex * 5);
         } else if (d < 1.5 * STRAIGHT_LENGTH + 2 * Math.PI * TRACK_RADIUS) {
           const theta = 1.5 * Math.PI + (d - (1.5 * STRAIGHT_LENGTH + Math.PI * TRACK_RADIUS)) / TRACK_RADIUS;
-          x = (centerX + STRAIGHT_LENGTH / 2) + Math.cos(theta) * (TRACK_RADIUS + (i * 5));
-          y = centerY + Math.sin(theta) * (TRACK_RADIUS + (i * 5));
+          x = (centerX + STRAIGHT_LENGTH / 2) + Math.cos(theta) * (TRACK_RADIUS + (simIndex * 5));
+          y = centerY + Math.sin(theta) * (TRACK_RADIUS + (simIndex * 5));
         } else {
           const d2 = d - (1.5 * STRAIGHT_LENGTH + 2 * Math.PI * TRACK_RADIUS);
           x = (centerX + STRAIGHT_LENGTH / 2) - d2;
-          y = centerY + TRACK_RADIUS + (i * 5);
+          y = centerY + TRACK_RADIUS + (simIndex * 5);
         }
         sprite.x = x;
         sprite.y = y;
@@ -224,11 +228,24 @@ export const RaceSimulator = () => {
       }
     });
 
-    const speeds = sprites.map((_, i) => {
-      const entry = raceDetail?.entries[i];
+    // 実際の走破タイムに近づけるため、速度計算を調整
+    // 1600mを約96秒 (1分36秒) で走るとして、平均速度は約16.6m/s
+    // PixiJSのticker.deltaTimeはデフォルトで1 (60fpsの場合)
+    // 1フレームあたりの移動距離 = (目標平均速度 / FPS) * 調整係数
+    // 16.6m/s / 60fps = 約0.276m/frame
+    // 調整係数を導入して、stats.speedが50の場合にこの値に近づける
+    const baseSpeedPerFrame = 0.276; // 16.6m/s / 60fps
+    const speedAdjustmentFactor = 0.005; // stats.speedの影響度
+
+    const speeds = sprites.map((sprite) => {
+      const entry = raceDetail?.entries.find(e => e.horse_number === sprite.horseNumber);
       const analysis = entry ? horseAnalyses[entry.horse.horse_id] : null;
-      return 2 + (analysis?.stats.speed || 50) / 100;
+      const horseSpeedStat = analysis?.stats.speed || 50;
+      // 基本速度 + (馬のスピード能力 - 平均) * 調整係数
+      return baseSpeedPerFrame + (horseSpeedStat - 50) * speedAdjustmentFactor;
     });
+
+    const simSpeedRef = { current: simSpeed };
 
     const updateLogic = (ticker: Ticker) => {
       if (!startedRef.current) return;
@@ -243,14 +260,14 @@ export const RaceSimulator = () => {
           const currentProgressRatio = progress[i] / targetDistance;
           const phaseFactor = currentProgressRatio < 0.6 ? styleFactors[i].early : styleFactors[i].late;
 
-          const baseSpeed = speeds[i] * 5;
-          const speed = baseSpeed * phaseFactor * ticker.deltaTime;
+          const speed = speeds[i] * phaseFactor * ticker.deltaTime * simSpeedRef.current;
           progress[i] += speed;
 
           // ゴール判定
           if (progress[i] >= targetDistance && !finishedMap.has(i)) {
             finishedMap.add(i);
-            const finishTime = (performance.now() - startTimeRef.current) / 1000;
+            // 経過時間をシミュレーション速度で割って現実の時間に近づける
+            const finishTime = (performance.now() - startTimeRef.current) / 1000 / simSpeedRef.current;
             const horseNumber = raceDetail?.entries[i].horse_number || 0;
 
             const newResult = { horseNumber, time: finishTime };
@@ -300,13 +317,19 @@ export const RaceSimulator = () => {
     if (appRef.current) {
       renderSimContent();
     }
-  }, [raceDetail, horseAnalyses]);
+  }, [raceDetail, horseAnalyses, simSpeed]); // simSpeedが変更されたら再描画
 
   // フォーマット用ヘルパー
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = (seconds % 60).toFixed(1);
     return `${mins}:${secs.padStart(4, "0")}`;
+  };
+
+  const handleStart = () => {
+    setSimResults([]);
+    simResultsRef.current = [];
+    setStarted(true);
   };
 
   return (
@@ -321,7 +344,7 @@ export const RaceSimulator = () => {
           <select
             value={selectedRaceId}
             onChange={(e) => setSelectedRaceId(e.target.value)}
-            disabled={loading}
+            disabled={loading || started}
             style={{ padding: "10px 16px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", backgroundColor: "white" }}
           >
             {races.map(race => (
@@ -330,41 +353,60 @@ export const RaceSimulator = () => {
               </option>
             ))}
           </select>
-          <button
-            onClick={() => {
-              if (started) {
+          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+            <div style={{ display: "flex", background: "#f1f5f9", borderRadius: "8px", padding: "4px" }}>
+              {[1, 2, 5].map(v => (
+                <button
+                  key={v}
+                  onClick={() => setSimSpeed(v)}
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: simSpeed === v ? "white" : "transparent",
+                    boxShadow: simSpeed === v ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                    color: simSpeed === v ? "#2563eb" : "#64748b",
+                    fontSize: "13px",
+                    fontWeight: simSpeed === v ? "bold" : "normal",
+                    cursor: "pointer",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  {v}x
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleStart}
+              disabled={!raceDetail || started}
+              style={{
+                padding: "8px 20px",
+                background: (!raceDetail || started) ? "#cbd5e1" : "#2563eb",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                fontWeight: "600",
+                cursor: (!raceDetail || started) ? "default" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                transition: "all 0.2s"
+              }}
+            >
+              {started ? "🐎 走行中..." : "🏁 レース開始"}
+            </button>
+            <button
+              onClick={() => {
                 setStarted(false);
-              } else {
                 setSimResults([]);
                 simResultsRef.current = [];
-                setStarted(true);
-              }
-            }}
-            disabled={!selectedRaceId || loading}
-            style={{
-              padding: "10px 24px",
-              borderRadius: "8px",
-              border: "none",
-              backgroundColor: started ? "#ef4444" : "#2563eb",
-              color: "white",
-              fontWeight: "600",
-              cursor: "pointer",
-              transition: "transform 0.1s"
-            }}
-          >
-            {started ? "⏹️ ストップ" : "🏁 レース開始"}
-          </button>
-          <button
-            onClick={() => {
-              setStarted(false);
-              setSimResults([]);
-              simResultsRef.current = [];
-              renderSimContent();
-            }}
-            style={{ padding: "10px 24px", borderRadius: "8px", border: "1px solid #cbd5e1", backgroundColor: "white", fontWeight: "600", cursor: "pointer" }}
-          >
-            🔄 リセット
-          </button>
+                renderSimContent();
+              }}
+              style={{ padding: "10px 24px", borderRadius: "8px", border: "1px solid #cbd5e1", backgroundColor: "white", fontWeight: "600", cursor: "pointer" }}
+            >
+              🔄 リセット
+            </button>
+          </div>
         </div>
       </header>
 
@@ -500,12 +542,18 @@ export const RaceSimulator = () => {
                         <div style={{ fontSize: "11px", color: "#94a3b8" }}>{entry.popularity}番人気</div>
                       </td>
                       <td style={{ padding: "12px 8px", fontSize: "14px" }}>
-                        {entry.finish_position ? (
-                          <div style={{ display: "flex", flexDirection: "column" }}>
-                            <span style={{ fontWeight: "bold" }}>{entry.finish_position}着</span>
-                            <span style={{ fontSize: "12px", color: "#64748b" }}>{entry.finish_time}</span>
-                          </div>
-                        ) : "未確定"}
+                        {entry.status === 'result' ? (
+                          entry.finish_position ? (
+                            <div style={{ display: "flex", flexDirection: "column" }}>
+                              <span style={{ fontWeight: "bold" }}>{entry.finish_position}着</span>
+                              <span style={{ fontSize: "12px", color: "#64748b" }}>{entry.finish_time}</span>
+                            </div>
+                          ) : "未確定"
+                        ) : (
+                          <span style={{ color: "#ef4444", fontWeight: "bold" }}>
+                            {entry.status === 'scratched' ? '取消' : entry.status === 'excluded' ? '除外' : '中止'}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )
