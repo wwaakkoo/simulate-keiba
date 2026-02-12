@@ -18,8 +18,6 @@ from app.api.schemas import (
     ScrapeRaceRequest,
     ScrapeRequest,
     ScrapeResponse,
-    RaceEntryResponse,
-    RaceListResponse,
     HorseAnalysisResponse,
 )
 from app.core.database import get_db

@@ -1,16 +1,8 @@
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { SIMULATION_CONFIG } from "../config";
 
 const HORSE_RADIUS = 15;
-const COLORS: Record<number, number> = {
-    1: 0xffffff, // 白
-    2: 0x000000, // 黒
-    3: 0xff0000, // 赤
-    4: 0x0000ff, // 青
-    5: 0xffff00, // 黄
-    6: 0x008000, // 緑
-    7: 0xffa500, // 橙
-    8: 0xffc0cb, // 桃
-};
+const COLORS = SIMULATION_CONFIG.COLORS;
 
 export class HorseSprite extends Container {
     private _horseNumber: number;

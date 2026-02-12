@@ -4,10 +4,9 @@ import { HorseSprite } from "./models/HorseSprite";
 import { raceApi } from "../api/raceApi";
 import type { HorseAnalysisResponse, RaceDetailResponse, RaceListItem } from "../types";
 
-const COURSE_WIDTH = 1000;
-const COURSE_HEIGHT = 500;
-const TRACK_RADIUS = 150;
-const STRAIGHT_LENGTH = 400;
+import { SIMULATION_CONFIG } from "./config";
+
+const { WIDTH: COURSE_WIDTH, HEIGHT: COURSE_HEIGHT, TRACK_RADIUS, STRAIGHT_LENGTH } = SIMULATION_CONFIG;
 
 export const RaceSimulator = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -20,6 +19,12 @@ export const RaceSimulator = () => {
   const [horseAnalyses, setHorseAnalyses] = useState<Record<string, HorseAnalysisResponse>>({});
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
+  const updateLogicRef = useRef<((ticker: Ticker) => void) | null>(null);
+
+  useEffect(() => {
+    startedRef.current = started;
+  }, [started]);
 
   // レース一覧取得
   useEffect(() => {
@@ -27,7 +32,9 @@ export const RaceSimulator = () => {
       try {
         const data = await raceApi.getRaces();
         setRaces(data);
-        if (data.length > 0) setSelectedRaceId(data[0].race_id);
+        if (data.length > 0 && !selectedRaceId) {
+          setSelectedRaceId(data[0].race_id);
+        }
       } catch (e) {
         console.error("Failed to fetch races:", e);
       }
@@ -43,7 +50,6 @@ export const RaceSimulator = () => {
       const detail = await raceApi.getRaceDetail(raceId);
       setRaceDetail(detail);
 
-      // 全ての馬の分析データを並列取得
       const analyses: Record<string, HorseAnalysisResponse> = {};
       await Promise.all(
         detail.entries.map(async (entry) => {
@@ -69,136 +75,206 @@ export const RaceSimulator = () => {
     }
   }, [selectedRaceId]);
 
+  const initializingRef = useRef(false);
+
   useEffect(() => {
-    const initPixi = async () => {
-      const app = new Application();
-      await app.init({
-        width: COURSE_WIDTH,
-        height: COURSE_HEIGHT,
-        backgroundColor: 0x2e8b57,
-        antialias: true,
-      });
+    if (!canvasRef.current || appRef.current || initializingRef.current) return;
 
-      if (canvasRef.current && !canvasRef.current.hasChildNodes()) {
-        canvasRef.current.appendChild(app.canvas);
-      }
-      appRef.current = app;
-
-      // 2. オーバルコース描画
-      const trackLayer = new Container();
-      const graphics = new Graphics();
-
-      const centerX = COURSE_WIDTH / 2;
-      const centerY = COURSE_HEIGHT / 2;
-
-      // 内柵
-      graphics.moveTo(centerX - STRAIGHT_LENGTH / 2, centerY - TRACK_RADIUS);
-      graphics.lineTo(centerX + STRAIGHT_LENGTH / 2, centerY - TRACK_RADIUS);
-      graphics.arc(centerX + STRAIGHT_LENGTH / 2, centerY, TRACK_RADIUS, -Math.PI / 2, Math.PI / 2);
-      graphics.lineTo(centerX - STRAIGHT_LENGTH / 2, centerY + TRACK_RADIUS);
-      graphics.arc(centerX - STRAIGHT_LENGTH / 2, centerY, TRACK_RADIUS, Math.PI / 2, -Math.PI / 2);
-      graphics.stroke({ width: 2, color: 0xffffff });
-
-      // 外柵
-      const outerRadius = TRACK_RADIUS + 80;
-      graphics.moveTo(centerX - STRAIGHT_LENGTH / 2, centerY - outerRadius);
-      graphics.lineTo(centerX + STRAIGHT_LENGTH / 2, centerY - outerRadius);
-      graphics.arc(centerX + STRAIGHT_LENGTH / 2, centerY, outerRadius, -Math.PI / 2, Math.PI / 2);
-      graphics.lineTo(centerX - STRAIGHT_LENGTH / 2, centerY + outerRadius);
-      graphics.arc(centerX - STRAIGHT_LENGTH / 2, centerY, outerRadius, Math.PI / 2, -Math.PI / 2);
-      graphics.stroke({ width: 2, color: 0xffffff });
-
-      trackLayer.addChild(graphics);
-      app.stage.addChild(trackLayer);
-
-      // 3. 馬の配置 (実データ)
-      const horseLayer = new Container();
-      const sprites: HorseSprite[] = [];
-
-      if (raceDetail) {
-        raceDetail.entries.forEach((entry, i) => {
-          const sprite = new HorseSprite(entry.horse_number, entry.bracket_number || 1);
-          // スタート地点
-          sprite.x = centerX + STRAIGHT_LENGTH / 2;
-          sprite.y = centerY + TRACK_RADIUS + 10 + i * 5;
-          horseLayer.addChild(sprite);
-          sprites.push(sprite);
-        });
-      }
-
-      app.stage.addChild(horseLayer);
-      horsesRef.current = sprites;
-
-      // 4. アニメーション
-      const progress = sprites.map(() => 0);
-      const styleFactors = sprites.map((_, i) => {
-        const entry = raceDetail?.entries[i];
-        const analysis = entry ? horseAnalyses[entry.horse.horse_id] : null;
-        const style = analysis?.style || "UNKNOWN";
-
-        // 脚質ごとの速度特性 (前半/後半の倍率)
-        switch (style) {
-          case "NIGE": return { early: 1.2, late: 0.8 };
-          case "SENKO": return { early: 1.1, late: 0.9 };
-          case "SASHI": return { early: 0.9, late: 1.1 };
-          case "OIKOMI": return { early: 0.8, late: 1.2 };
-          default: return { early: 1.0, late: 1.0 };
+    initializingRef.current = true;
+    const app = new Application();
+    app.init({
+      width: COURSE_WIDTH,
+      height: COURSE_HEIGHT,
+      backgroundColor: 0x2e8b57,
+      antialias: true,
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
+    }).then(() => {
+      if (canvasRef.current) {
+        if (canvasRef.current.hasChildNodes()) {
+          canvasRef.current.innerHTML = "";
         }
+        canvasRef.current.appendChild(app.canvas);
+        appRef.current = app;
+        renderSimContent();
+      }
+      initializingRef.current = false;
+    }).catch(err => {
+      console.error("Pixi init error", err);
+      initializingRef.current = false;
+    });
+
+    return () => {
+      if (appRef.current) {
+        appRef.current.destroy(true, { children: true, texture: true });
+        appRef.current = null;
+      }
+    };
+  }, []);
+
+  const renderSimContent = () => {
+    const app = appRef.current;
+    if (!app) return;
+
+    if (updateLogicRef.current) {
+      app.ticker.remove(updateLogicRef.current);
+      updateLogicRef.current = null;
+    }
+
+    app.stage.removeChildren();
+
+    const centerX = COURSE_WIDTH / 2;
+    const centerY = COURSE_HEIGHT / 2;
+
+    const bg = new Graphics();
+    bg.rect(0, 0, COURSE_WIDTH, COURSE_HEIGHT);
+    bg.fill(0x2e8b57);
+    app.stage.addChild(bg);
+
+    const trackLayer = new Container();
+    const graphics = new Graphics();
+    graphics.moveTo(centerX - STRAIGHT_LENGTH / 2, centerY - TRACK_RADIUS);
+    graphics.lineTo(centerX + STRAIGHT_LENGTH / 2, centerY - TRACK_RADIUS);
+    graphics.arc(centerX + STRAIGHT_LENGTH / 2, centerY, TRACK_RADIUS, -Math.PI / 2, Math.PI / 2);
+    graphics.lineTo(centerX - STRAIGHT_LENGTH / 2, centerY + TRACK_RADIUS);
+    graphics.arc(centerX - STRAIGHT_LENGTH / 2, centerY, TRACK_RADIUS, Math.PI / 2, -Math.PI / 2);
+    graphics.stroke({ width: 4, color: 0xffffff });
+
+    const outerRadius = TRACK_RADIUS + 80;
+    graphics.moveTo(centerX - STRAIGHT_LENGTH / 2, centerY - outerRadius);
+    graphics.lineTo(centerX + STRAIGHT_LENGTH / 2, centerY - outerRadius);
+    graphics.arc(centerX + STRAIGHT_LENGTH / 2, centerY, outerRadius, -Math.PI / 2, Math.PI / 2);
+    graphics.lineTo(centerX - STRAIGHT_LENGTH / 2, centerY + outerRadius);
+    graphics.arc(centerX - STRAIGHT_LENGTH / 2, centerY, outerRadius, Math.PI / 2, -Math.PI / 2);
+    graphics.stroke({ width: 2, color: 0xffffff });
+
+    graphics.moveTo(centerX, centerY + TRACK_RADIUS);
+    graphics.lineTo(centerX, centerY + outerRadius);
+    graphics.stroke({ width: 4, color: 0xffff00 });
+
+    trackLayer.addChild(graphics);
+    app.stage.addChild(trackLayer);
+
+    const horseLayer = new Container();
+    const sprites: HorseSprite[] = [];
+    const totalPerimeter = 2 * STRAIGHT_LENGTH + 2 * Math.PI * TRACK_RADIUS;
+
+    if (raceDetail) {
+      const targetDistance = raceDetail.distance;
+      const startOffset = (totalPerimeter - (targetDistance % totalPerimeter)) % totalPerimeter;
+
+      raceDetail.entries.forEach((entry, i) => {
+        const sprite = new HorseSprite(entry.horse_number, entry.bracket_number || 1);
+        const d = startOffset % totalPerimeter;
+        let x, y;
+        if (d < STRAIGHT_LENGTH / 2) {
+          x = centerX - d; y = centerY + TRACK_RADIUS + (i * 5);
+        } else if (d < STRAIGHT_LENGTH / 2 + Math.PI * TRACK_RADIUS) {
+          const theta = Math.PI / 2 + (d - STRAIGHT_LENGTH / 2) / TRACK_RADIUS;
+          x = (centerX - STRAIGHT_LENGTH / 2) + Math.cos(theta) * (TRACK_RADIUS + (i * 5));
+          y = centerY + Math.sin(theta) * (TRACK_RADIUS + (i * 5));
+        } else if (d < 1.5 * STRAIGHT_LENGTH + Math.PI * TRACK_RADIUS) {
+          const d2 = d - (STRAIGHT_LENGTH / 2 + Math.PI * TRACK_RADIUS);
+          x = (centerX - STRAIGHT_LENGTH / 2) + d2;
+          y = centerY - TRACK_RADIUS - (i * 5);
+        } else if (d < 1.5 * STRAIGHT_LENGTH + 2 * Math.PI * TRACK_RADIUS) {
+          const theta = 1.5 * Math.PI + (d - (1.5 * STRAIGHT_LENGTH + Math.PI * TRACK_RADIUS)) / TRACK_RADIUS;
+          x = (centerX + STRAIGHT_LENGTH / 2) + Math.cos(theta) * (TRACK_RADIUS + (i * 5));
+          y = centerY + Math.sin(theta) * (TRACK_RADIUS + (i * 5));
+        } else {
+          const d2 = d - (1.5 * STRAIGHT_LENGTH + 2 * Math.PI * TRACK_RADIUS);
+          x = (centerX + STRAIGHT_LENGTH / 2) - d2;
+          y = centerY + TRACK_RADIUS + (i * 5);
+        }
+        sprite.x = x;
+        sprite.y = y;
+        horseLayer.addChild(sprite);
+        sprites.push(sprite);
       });
+    }
+    app.stage.addChild(horseLayer);
+    horsesRef.current = sprites;
 
-      const speeds = sprites.map((_, i) => {
-        const entry = raceDetail?.entries[i];
-        const analysis = entry ? horseAnalyses[entry.horse.horse_id] : null;
-        // 基本速度 + 個別スタッツ (暫定)
-        return 2 + (analysis?.stats.speed || 50) / 100;
-      });
+    const progress = sprites.map(() => 0);
+    const styleFactors = sprites.map((_, i) => {
+      const entry = raceDetail?.entries[i];
+      const analysis = entry ? horseAnalyses[entry.horse.horse_id] : null;
+      const style = analysis?.style || "UNKNOWN";
+      switch (style) {
+        case "NIGE": return { early: 1.2, late: 0.8 };
+        case "SENKO": return { early: 1.1, late: 0.9 };
+        case "SASHI": return { early: 0.9, late: 1.1 };
+        case "OIKOMI": return { early: 0.8, late: 1.2 };
+        default: return { early: 1.0, late: 1.0 };
+      }
+    });
 
-      app.ticker.add((ticker: Ticker) => {
-        if (!started) return;
+    const speeds = sprites.map((_, i) => {
+      const entry = raceDetail?.entries[i];
+      const analysis = entry ? horseAnalyses[entry.horse.horse_id] : null;
+      return 2 + (analysis?.stats.speed || 50) / 100;
+    });
 
-        const totalPerimeter = 2 * STRAIGHT_LENGTH + 2 * Math.PI * TRACK_RADIUS;
+    const updateLogic = (ticker: Ticker) => {
+      if (!startedRef.current) return;
 
-        sprites.forEach((sprite, i) => {
-          // レースの進行状況 (0.0 ~ 1.0)
-          const currentProgress = progress[i] / totalPerimeter;
-          const factors = styleFactors[i];
-          const phaseFactor = currentProgress < 0.6 ? factors.early : factors.late;
+      const targetDistance = raceDetail?.distance || 1600;
+      const startOffset = (totalPerimeter - (targetDistance % totalPerimeter)) % totalPerimeter;
+      let allFinished = true;
 
-          const speed = speeds[i] * phaseFactor * ticker.deltaTime;
+      sprites.forEach((sprite, i) => {
+        if (progress[i] < targetDistance) {
+          allFinished = false;
+          const currentProgressRatio = progress[i] / targetDistance;
+          const phaseFactor = currentProgressRatio < 0.6 ? styleFactors[i].early : styleFactors[i].late;
+
+          const baseSpeed = speeds[i] * 5;
+          const speed = baseSpeed * phaseFactor * ticker.deltaTime;
           progress[i] += speed;
+        }
 
-          const d = progress[i] % totalPerimeter;
+        const d = (startOffset + progress[i]) % totalPerimeter;
+        let x, y;
 
-          let x, y;
-          if (d < STRAIGHT_LENGTH) {
-            x = (centerX + STRAIGHT_LENGTH / 2) - d;
-            y = centerY + TRACK_RADIUS + (i * 5);
-          } else if (d < STRAIGHT_LENGTH + Math.PI * TRACK_RADIUS) {
-            const theta = (d - STRAIGHT_LENGTH) / TRACK_RADIUS + Math.PI / 2;
-            x = (centerX - STRAIGHT_LENGTH / 2) + Math.cos(theta) * (TRACK_RADIUS + i * 5);
-            y = centerY + Math.sin(theta) * (TRACK_RADIUS + i * 5);
-          } else if (d < 2 * STRAIGHT_LENGTH + Math.PI * TRACK_RADIUS) {
-            const d2 = d - (STRAIGHT_LENGTH + Math.PI * TRACK_RADIUS);
-            x = (centerX - STRAIGHT_LENGTH / 2) + d2;
-            y = centerY - TRACK_RADIUS - (i * 5);
-          } else {
-            const theta = (d - (2 * STRAIGHT_LENGTH + Math.PI * TRACK_RADIUS)) / TRACK_RADIUS - Math.PI / 2;
-            x = (centerX + STRAIGHT_LENGTH / 2) + Math.cos(theta) * (TRACK_RADIUS + i * 5);
-            y = centerY + Math.sin(theta) * (TRACK_RADIUS + i * 5);
-          }
+        if (d < STRAIGHT_LENGTH / 2) {
+          x = centerX - d;
+          y = centerY + TRACK_RADIUS + (i * 5);
+        } else if (d < STRAIGHT_LENGTH / 2 + Math.PI * TRACK_RADIUS) {
+          const theta = Math.PI / 2 + (d - STRAIGHT_LENGTH / 2) / TRACK_RADIUS;
+          x = (centerX - STRAIGHT_LENGTH / 2) + Math.cos(theta) * (TRACK_RADIUS + i * 5);
+          y = centerY + Math.sin(theta) * (TRACK_RADIUS + i * 5);
+        } else if (d < 1.5 * STRAIGHT_LENGTH + Math.PI * TRACK_RADIUS) {
+          const d2 = d - (STRAIGHT_LENGTH / 2 + Math.PI * TRACK_RADIUS);
+          x = (centerX - STRAIGHT_LENGTH / 2) + d2;
+          y = centerY - TRACK_RADIUS - (i * 5);
+        } else if (d < 1.5 * STRAIGHT_LENGTH + 2 * Math.PI * TRACK_RADIUS) {
+          const theta = 1.5 * Math.PI + (d - (1.5 * STRAIGHT_LENGTH + Math.PI * TRACK_RADIUS)) / TRACK_RADIUS;
+          x = (centerX + STRAIGHT_LENGTH / 2) + Math.cos(theta) * (TRACK_RADIUS + i * 5);
+          y = centerY + Math.sin(theta) * (TRACK_RADIUS + i * 5);
+        } else {
+          const d2 = d - (1.5 * STRAIGHT_LENGTH + 2 * Math.PI * TRACK_RADIUS);
+          x = (centerX + STRAIGHT_LENGTH / 2) - d2;
+          y = centerY + TRACK_RADIUS + (i * 5);
+        }
 
-          sprite.x = x;
-          sprite.y = y;
-        });
+        sprite.x = x;
+        sprite.y = y;
       });
+
+      if (allFinished && sprites.length > 0) {
+        setStarted(false);
+      }
     };
 
+    updateLogicRef.current = updateLogic;
+    app.ticker.add(updateLogic);
+  };
+
+  useEffect(() => {
     if (appRef.current) {
-      // 既存のステージをクリア
-      appRef.current.stage.removeChildren();
+      renderSimContent();
     }
-    initPixi();
-  }, [raceDetail, started]); // raceDetail または started が変わるたびに再初期化（プロトタイプなので）
+  }, [raceDetail, horseAnalyses]);
 
   return (
     <div className="simulator-container" style={{ padding: "20px" }}>
@@ -218,17 +294,27 @@ export const RaceSimulator = () => {
             ))}
           </select>
           <button
-            onClick={() => setStarted(true)}
-            disabled={!selectedRaceId || loading || started}
+            onClick={() => {
+              if (started) {
+                setStarted(false);
+                renderSimContent();
+              } else {
+                setStarted(true);
+              }
+            }}
+            disabled={!selectedRaceId || loading}
             style={{ padding: "8px 16px", cursor: "pointer", marginRight: "10px" }}
           >
-            🏁 レース開始
+            {started ? "⏹️ ストップ" : "🏁 レース開始"}
           </button>
           <button
-            onClick={() => setStarted(false)}
+            onClick={() => {
+              setStarted(false);
+              renderSimContent();
+            }}
             style={{ padding: "8px 16px", cursor: "pointer" }}
           >
-            ⏹️ リセット
+            🔄 リセット
           </button>
         </div>
         {loading && <p>データを読み込み中...</p>}

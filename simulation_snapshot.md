@@ -1,0 +1,13 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - heading "🏇 レースシミュレーション" [level=2] [ref=e5]
+    - generic [ref=e6]:
+      - combobox [ref=e7]:
+        - option "2024-12-22 中山 - (2500m)" [selected]
+      - button "🏁 レース開始" [ref=e8] [cursor=pointer]
+      - button "⏹️ リセット" [ref=e9] [cursor=pointer]
+    - generic [ref=e13]:
+      - generic [ref=e14]: "出走頭数: 16頭"
+      - generic [ref=e15]: "分析取得: 16頭"
+  - contentinfo [ref=e11]:
+    - paragraph [ref=e12]: ※ オーバルコースを実装中。現在はデモ表示です。
