@@ -1,0 +1,188 @@
+"""
+レース関連APIエンドポイント
+"""
+
+import logging
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.api.schemas import (
+    EntryResponse,
+    HorseResponse,
+    RaceDetailResponse,
+    RaceListItem,
+    ScrapeRaceRequest,
+    ScrapeRequest,
+    ScrapeResponse,
+)
+from app.core.database import get_db
+from app.models import Horse, Race, RaceEntry
+from app.scraper.service import ScraperService
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api", tags=["races"])
+
+
+@router.post("/scrape", response_model=ScrapeResponse)
+async def scrape_races(
+    request: ScrapeRequest,
+    session: AsyncSession = Depends(get_db),
+) -> ScrapeResponse:
+    """指定日のレースデータを収集する"""
+    service = ScraperService(session)
+    try:
+        result = await service.scrape_date(request.date)
+        return ScrapeResponse(
+            total=int(result["total"]),
+            new=int(result["new"]),
+            skipped=int(result["skipped"]),
+            errors=int(result["errors"]),
+            race_ids=list(result["race_ids"]),  # type: ignore[arg-type]
+        )
+    finally:
+        await service.close()
+
+
+@router.post("/scrape/race", response_model=ScrapeResponse)
+async def scrape_single_race(
+    request: ScrapeRaceRequest,
+    session: AsyncSession = Depends(get_db),
+) -> ScrapeResponse:
+    """単一レースのデータを収集する"""
+    service = ScraperService(session)
+    try:
+        race = await service.scrape_race(request.race_id)
+        if race is None:
+            return ScrapeResponse(
+                total=1, new=0, skipped=1, errors=0, race_ids=[]
+            )
+        return ScrapeResponse(
+            total=1, new=1, skipped=0, errors=0, race_ids=[request.race_id]
+        )
+    finally:
+        await service.close()
+
+
+@router.get("/races", response_model=list[RaceListItem])
+async def list_races(
+    date_from: date | None = Query(None, description="開始日"),
+    date_to: date | None = Query(None, description="終了日"),
+    venue: str | None = Query(None, description="会場名"),
+    session: AsyncSession = Depends(get_db),
+) -> list[RaceListItem]:
+    """レース一覧を取得する"""
+    stmt = select(Race).order_by(Race.date.desc(), Race.race_id)
+
+    if date_from:
+        stmt = stmt.where(Race.date >= date_from)
+    if date_to:
+        stmt = stmt.where(Race.date <= date_to)
+    if venue:
+        stmt = stmt.where(Race.venue == venue)
+
+    result = await session.execute(stmt)
+    races = result.scalars().all()
+
+    return [
+        RaceListItem(
+            race_id=r.race_id,
+            name=r.name,
+            date=r.date,
+            venue=r.venue,
+            course_type=r.course_type,
+            distance=r.distance,
+            track_condition=r.track_condition,
+            race_class=r.race_class,
+            num_entries=r.num_entries,
+        )
+        for r in races
+    ]
+
+
+@router.get("/races/{race_id}", response_model=RaceDetailResponse)
+async def get_race_detail(
+    race_id: str,
+    session: AsyncSession = Depends(get_db),
+) -> RaceDetailResponse:
+    """レース詳細（出走馬・結果含む）を取得する"""
+    stmt = (
+        select(Race)
+        .where(Race.race_id == race_id)
+        .options(selectinload(Race.entries).selectinload(RaceEntry.horse))
+    )
+    result = await session.execute(stmt)
+    race = result.scalar_one_or_none()
+
+    if race is None:
+        raise HTTPException(status_code=404, detail=f"Race {race_id} not found")
+
+    entries = [
+        EntryResponse(
+            horse_number=e.horse_number,
+            bracket_number=e.bracket_number,
+            horse=HorseResponse(
+                horse_id=e.horse.horse_id,
+                name=e.horse.name,
+                sex=e.horse.sex,
+                trainer=e.horse.trainer,
+                sire=e.horse.sire,
+                dam=e.horse.dam,
+            ),
+            jockey=e.jockey,
+            weight_carried=e.weight_carried,
+            odds=e.odds,
+            popularity=e.popularity,
+            finish_position=e.finish_position,
+            finish_time=e.finish_time,
+            margin=e.margin,
+            passing_order=e.passing_order,
+            last_3f=e.last_3f,
+            horse_weight=e.horse_weight,
+            horse_weight_diff=e.horse_weight_diff,
+        )
+        for e in sorted(race.entries, key=lambda x: x.horse_number)
+    ]
+
+    return RaceDetailResponse(
+        race_id=race.race_id,
+        name=race.name,
+        date=race.date,
+        venue=race.venue,
+        course_type=race.course_type,
+        distance=race.distance,
+        direction=race.direction,
+        weather=race.weather,
+        track_condition=race.track_condition,
+        race_class=race.race_class,
+        num_entries=race.num_entries,
+        entries=entries,
+    )
+
+
+@router.get("/horses/{horse_id}")
+async def get_horse(
+    horse_id: str,
+    session: AsyncSession = Depends(get_db),
+) -> HorseResponse:
+    """馬の詳細情報を取得する"""
+    result = await session.execute(
+        select(Horse).where(Horse.horse_id == horse_id)
+    )
+    horse = result.scalar_one_or_none()
+
+    if horse is None:
+        raise HTTPException(status_code=404, detail=f"Horse {horse_id} not found")
+
+    return HorseResponse(
+        horse_id=horse.horse_id,
+        name=horse.name,
+        sex=horse.sex,
+        trainer=horse.trainer,
+        sire=horse.sire,
+        dam=horse.dam,
+    )

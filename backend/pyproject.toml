@@ -41,6 +41,9 @@ select = [
     "B",   # flake8-bugbear
     "UP",  # pyupgrade
 ]
+ignore = [
+    "B008",  # FastAPI の Depends() パターンを許可
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
