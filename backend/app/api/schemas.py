@@ -96,3 +96,10 @@ class RaceDetailResponse(BaseModel):
     race_class: str | None = None
     num_entries: int | None = None
     entries: list[EntryResponse] = []
+
+
+class HorseAnalysisResponse(BaseModel):
+    horse_id: str
+    name: str = ""
+    style: str  # NIGE, SENKO, SASHI, OIKOMI, UNKNOWN
+    stats: dict[str, float]  # speed, stamina, etc.

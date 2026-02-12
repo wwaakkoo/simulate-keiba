@@ -18,14 +18,18 @@ from app.api.schemas import (
     ScrapeRaceRequest,
     ScrapeRequest,
     ScrapeResponse,
+    RaceEntryResponse,
+    RaceListResponse,
+    HorseAnalysisResponse,
 )
 from app.core.database import get_db
 from app.models import Horse, Race, RaceEntry
 from app.scraper.service import ScraperService
+from app.predictor.logic import determine_running_style
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api", tags=["races"])
+router = APIRouter(prefix="/api")
 
 
 @router.post("/scrape", response_model=ScrapeResponse)
@@ -185,4 +189,52 @@ async def get_horse(
         trainer=horse.trainer,
         sire=horse.sire,
         dam=horse.dam,
+    )
+
+
+@router.get("/analysis/horses/{horse_id}", response_model=HorseAnalysisResponse)
+async def analyze_horse_stats(
+    horse_id: str,
+    session: AsyncSession = Depends(get_db),
+) -> HorseAnalysisResponse:
+    """馬の傾向分析（脚質など）を取得する"""
+    # 馬情報を取得
+    stmt = select(Horse).where(Horse.horse_id == horse_id)
+    result = await session.execute(stmt)
+    horse = result.scalar_one_or_none()
+    
+    if not horse:
+        raise HTTPException(status_code=404, detail="Horse not found")
+
+    # 過去レースの出走結果を取得 (新しい順)
+    entry_stmt = (
+        select(RaceEntry)
+        .where(RaceEntry.horse_id == horse.id)
+        .join(Race)
+        .options(selectinload(RaceEntry.race))
+        .order_by(Race.date.desc())
+    )
+    entry_result = await session.execute(entry_stmt)
+    entries = entry_result.scalars().all()
+
+    # 脚質判定
+    style = determine_running_style(entries)
+    
+    # 簡易スタッツ計算 (TODO: 機械学習モデルへの置き換え)
+    # スピード: 上がり3Fの平均からざっくりスコア化 (小さい方が速い)
+    last_3f_list = [e.last_3f for e in entries if e.last_3f]
+    avg_3f = sum(last_3f_list) / len(last_3f_list) if last_3f_list else 36.0
+    # 33.0秒 -> 100点, 40.0秒 -> 30点 くらいの線形変換
+    speed_score = max(30.0, min(100.0, 100.0 - (avg_3f - 33.0) * 10))
+
+    return HorseAnalysisResponse(
+        horse_id=horse.horse_id,
+        name=horse.name,
+        style=style.value,
+        stats={
+            "speed": float(f"{speed_score:.1f}"),
+            "stamina": 80.0,  # 仮
+            "start_dash": 75.0,  # 仮
+            "races_count": float(len(entries)),
+        },
     )
