@@ -1,0 +1,72 @@
+# .gitignore
+
+# =====================
+# 共通
+# =====================
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# =====================
+# Node.js / Frontend
+# =====================
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# =====================
+# Python / Backend
+# =====================
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+*.egg
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+venv/
+.venv/
+
+# =====================
+# データベース
+# =====================
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+
+# =====================
+# IDE
+# =====================
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# =====================
+# キャッシュ・一時ファイル
+# =====================
+.cache/
+tmp/
+temp/
+*.tmp
+
+# =====================
+# ML モデル（大きいファイルはGit管理外）
+# =====================
+*.pkl
+*.joblib
+models/*.pkl

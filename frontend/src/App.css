@@ -1,0 +1,140 @@
+:root {
+  --color-bg: #0f1117;
+  --color-surface: #1a1d26;
+  --color-surface-hover: #242832;
+  --color-primary: #6c5ce7;
+  --color-primary-light: #a29bfe;
+  --color-accent: #00cec9;
+  --color-text: #e4e6eb;
+  --color-text-muted: #8b8fa3;
+  --color-ok: #00b894;
+  --color-pending: #fdcb6e;
+  --color-border: #2d3142;
+  --radius: 12px;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --font-main: 'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-main);
+  background: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 3rem;
+  padding: 2.5rem 0;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #2d1b69 100%);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.app-header h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.app-subtitle {
+  color: var(--color-primary-light);
+  font-size: 1.1rem;
+  font-weight: 400;
+}
+
+.app-main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .app-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+.status-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.status-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.status-card h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  color: var(--color-text);
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.status-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.status-item {
+  font-size: 0.95rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: var(--color-surface-hover);
+}
+
+.status-ok {
+  border-left: 3px solid var(--color-ok);
+}
+
+.status-pending {
+  border-left: 3px solid var(--color-pending);
+}
+
+.roadmap-list {
+  list-style: none;
+  counter-reset: roadmap;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.roadmap-item {
+  counter-increment: roadmap;
+  font-size: 0.95rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+  position: relative;
+  padding-left: 1rem;
+}
+
+.roadmap-item.done {
+  color: var(--color-ok);
+  font-weight: 500;
+  border-left: 3px solid var(--color-ok);
+}
