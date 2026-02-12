@@ -93,16 +93,31 @@ def _parse_race_info(soup: BeautifulSoup, race_id: str) -> ParsedRaceInfo:
     # レース日付 — race_id から推定
     # race_id format: YYYYVVKKDDRR (Y=年, V=会場, K=回, D=日, R=レース番号)
     year = race_id[:4]
-    date_str = f"{year}-01-01"  # デフォルト。実際はページから取得
+    date_str = f"{year}-01-01"  # デフォルト
 
-    # ページ内の日付を探す
-    date_tag = soup.select_one(".smalltxt, .Race_Date, p.smalltxt")
-    if date_tag:
-        date_text = date_tag.get_text(strip=True)
-        date_match = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", date_text)
+    # 日付パース: ページ内の特定クラス、またはヘッダー付近のテキストから探す
+    # 例: "2024年12月22日"
+    date_found = False
+    
+    # 優先セレクタ
+    date_tags = soup.select(".smalltxt, .Race_Date, p.smalltxt, .race_head_inner")
+    for tag in date_tags:
+        text = tag.get_text(strip=True)
+        date_match = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", text)
         if date_match:
             y, m, d = date_match.groups()
             date_str = f"{y}-{int(m):02d}-{int(d):02d}"
+            date_found = True
+            break
+            
+    # タイトル周辺のテキストからも探す（バックアップ）
+    if not date_found:
+        header_text = soup.select_one("div.racedata")
+        if header_text:
+            date_match = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", header_text.get_text())
+            if date_match:
+                y, m, d = date_match.groups()
+                date_str = f"{y}-{int(m):02d}-{int(d):02d}"
 
     # 会場 — race_id から取得
     venue_code = race_id[4:6]
@@ -110,7 +125,7 @@ def _parse_race_info(soup: BeautifulSoup, race_id: str) -> ParsedRaceInfo:
 
     venue = VENUE_CODE_MAP.get(venue_code, "不明")
 
-    # コース情報（例: "芝右2000m"、"ダ左1200m"）
+    # コース情報（例: "芝右2000m"、"ダ左1200m"、"芝2500m"）
     course_type = "芝"
     distance = 0
     direction = ""
@@ -119,24 +134,49 @@ def _parse_race_info(soup: BeautifulSoup, race_id: str) -> ParsedRaceInfo:
     race_class = ""
 
     # レース詳細情報のパース
-    race_data_spans = soup.select("diary_snap_cut span, .RaceData01 span, span")
-    for span in race_data_spans:
-        text = span.get_text(strip=True)
-        # コース情報
-        course_match = re.search(r"(芝|ダート|ダ)\s*(右|左|直線)?\s*(\d{3,5})m", text)
-        if course_match:
-            ct = course_match.group(1)
-            course_type = "ダート" if ct in ("ダ", "ダート") else "芝"
-            direction = course_match.group(2) or ""
-            distance = int(course_match.group(3))
+    # diary_snap_cut span: 通常の結果ページ
+    # .RaceData01 span: 一部のページ
+    race_data_spans = soup.select("diary_snap_cut span, .RaceData01 span, span, .racedata")
+    
+    # 全テキストを結合して検索するアプローチも試す（構造が崩れている場合用）
+    full_header_text = ""
+    if race_data_spans:
+        full_header_text = " ".join([s.get_text(strip=True) for s in race_data_spans])
 
-        # 天候
-        weather_match = re.search(r"天候\s*[:：]\s*(\S+)", text)
+    # 距離・コース種別
+    # "芝2500m", "ダート1800m", "芝右 外1600m" などに対応
+    course_match = re.search(r"(芝|ダート|ダ)(?:[^0-9m]*?)(\d{3,5})m", full_header_text)
+    if not course_match:
+        # 個別のspanからも再トライ
+        for span in race_data_spans:
+            text = span.get_text(strip=True)
+            m = re.search(r"(芝|ダート|ダ)(?:[^0-9m]*?)(\d{3,5})m", text)
+            if m:
+                course_match = m
+                break
+    
+    if course_match:
+        ct = course_match.group(1)
+        course_type = "ダート" if ct in ("ダ", "ダート") else "芝"
+        distance = int(course_match.group(2))
+        
+        # 方向 ("右", "左", "直線")
+        if "右" in full_header_text:
+            direction = "右"
+        elif "左" in full_header_text:
+            direction = "左"
+        elif "直線" in full_header_text:
+            direction = "直線"
+
+    # 天候
+    if "天候" in full_header_text:
+        weather_match = re.search(r"天候\s*[:：]\s*(\S+)", full_header_text)
         if weather_match:
             weather = weather_match.group(1)
-
-        # 馬場状態
-        condition_match = re.search(r"(芝|ダート|ダ)\s*[:：]\s*(良|稍重|重|不良)", text)
+    
+    # 馬場状態
+    if "芝" in full_header_text or "ダート" in full_header_text:
+        condition_match = re.search(r"(芝|ダート|ダ)\s*[:：]\s*(良|稍重|重|不良)", full_header_text)
         if condition_match:
             track_condition = condition_match.group(2)
 

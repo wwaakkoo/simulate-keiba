@@ -76,12 +76,16 @@ class ScraperClient:
                 response = await client.get(url)
                 response.raise_for_status()
 
-                # netkeiba.com は EUC-JP を使用することがある
-                content_type = response.headers.get("content-type", "")
-                if "euc-jp" in content_type.lower():
-                    return response.content.decode("euc-jp", errors="replace")
-
-                return response.text
+                # netkeiba.com は EUC-JP が多いが、ヘッダーに含まれないこともある
+                # まず EUC-JP でのデコードを試みる
+                try:
+                    return response.content.decode("euc-jp")
+                except UnicodeDecodeError:
+                    # 失敗したら UTF-8、それもだめなら httpx の推定に任せる
+                    try:
+                        return response.content.decode("utf-8")
+                    except UnicodeDecodeError:
+                        return response.text
 
             except httpx.HTTPStatusError as e:
                 logger.warning(
