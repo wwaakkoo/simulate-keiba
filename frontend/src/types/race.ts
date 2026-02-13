@@ -1,30 +1,9 @@
 /**
- * レースに関する型定義
+ * ドメイン型定義
+ *
+ * 将来の予測エンジンUI・結果分析で使用するドメインモデル型。
+ * ※ APIレスポンス型は types/index.ts を参照。
  */
-
-/** 馬の情報 */
-export interface Horse {
-    id: string;
-    name: string;
-    number: number;
-    jockey: string;
-    trainer: string;
-    weight: number;
-    age: number;
-    sex: string;
-}
-
-/** レース情報 */
-export interface Race {
-    id: string;
-    name: string;
-    date: string;
-    venue: string;
-    course: string;
-    distance: number;
-    surfaceType: 'turf' | 'dirt';
-    entries: Horse[];
-}
 
 /** 予測結果 */
 export interface Prediction {

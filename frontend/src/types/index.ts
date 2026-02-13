@@ -1,3 +1,10 @@
+/**
+ * APIレスポンス型定義
+ *
+ * バックエンド (FastAPI Pydantic schemas) と 1:1 で対応する型。
+ * ドメイン型（予測・結果分析用）は types/race.ts を参照。
+ */
+
 export interface HorseResponse {
     horse_id: string;
     name: string;

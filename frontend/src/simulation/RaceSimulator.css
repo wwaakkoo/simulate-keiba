@@ -1,0 +1,407 @@
+/* ======================================================
+ * RaceSimulator 画面のスタイル
+ * ====================================================== */
+
+/* --- ページ全体 --- */
+.simulator-page {
+    padding: 24px;
+    min-height: 100vh;
+    background-color: #f8fafc;
+}
+
+/* --- ヘッダー --- */
+.sim-header {
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.sim-header__title {
+    margin: 0;
+    font-size: 24px;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sim-header__badge {
+    font-size: 14px;
+    font-weight: normal;
+    background: #e2e8f0;
+    padding: 4px 12px;
+    border-radius: 20px;
+}
+
+/* --- レース選択 --- */
+.sim-select {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    outline: none;
+    background-color: white;
+    font-size: 14px;
+    min-width: 240px;
+}
+
+/* --- コントロール群 --- */
+.sim-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.sim-speed-group {
+    display: flex;
+    background: #f1f5f9;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+.sim-speed-btn {
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: normal;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sim-speed-btn--active {
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    color: #2563eb;
+    font-weight: bold;
+}
+
+.sim-start-btn {
+    padding: 8px 20px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.sim-start-btn:hover:not(:disabled) {
+    background: #1d4ed8;
+}
+
+.sim-start-btn--disabled,
+.sim-start-btn:disabled {
+    background: #cbd5e1;
+    cursor: default;
+}
+
+.sim-reset-btn {
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background-color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sim-reset-btn:hover {
+    background-color: #f8fafc;
+}
+
+/* --- キャンバス --- */
+.sim-canvas {
+    display: flex;
+    justify-content: center;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #2e8b57;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    padding: 16px;
+    margin: 0 auto;
+    width: max-content;
+}
+
+.sim-canvas--hidden {
+    display: none;
+}
+
+/* --- ローディング --- */
+.sim-loading {
+    text-align: center;
+    padding: 40px;
+    font-size: 18px;
+    color: #64748b;
+}
+
+/* --- レース情報パネル --- */
+.sim-race-info {
+    flex: 1;
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.sim-race-info__header {
+    color: #1e293b;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.sim-race-info__note {
+    color: #64748b;
+    font-size: 14px;
+    font-weight: normal;
+}
+
+.sim-race-info__desc {
+    font-size: 14px;
+    color: #64748b;
+    margin: 0;
+}
+
+/* --- 順位パネル --- */
+.sim-ranking {
+    width: 380px;
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.sim-ranking__title {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 18px;
+    border-bottom: 2px solid #f1f5f9;
+    padding-bottom: 8px;
+}
+
+.sim-ranking__table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.sim-ranking__table thead th {
+    text-align: left;
+    font-size: 13px;
+    color: #64748b;
+    padding: 8px;
+    font-weight: 600;
+}
+
+.sim-ranking__row {
+    border-bottom: 1px solid #f1f5f9;
+    animation: sim-slideIn 0.3s ease-out;
+}
+
+.sim-ranking__position {
+    padding: 10px 8px;
+    font-weight: bold;
+    color: #1e293b;
+}
+
+.sim-ranking__position--top3 {
+    color: #e11d48;
+}
+
+.sim-ranking__horse {
+    padding: 10px 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sim-ranking__bracket-badge {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 24px;
+    border: 1px solid #cbd5e1;
+    flex-shrink: 0;
+}
+
+.sim-ranking__time {
+    padding: 10px 8px;
+    font-size: 13px;
+    font-family: monospace;
+}
+
+.sim-ranking__actual {
+    padding: 10px 8px;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.sim-ranking__empty {
+    text-align: center;
+    padding: 32px;
+    color: #94a3b8;
+}
+
+/* --- コンテンツレイアウト --- */
+.sim-content {
+    display: flex;
+    gap: 24px;
+    flex-direction: column;
+    margin-top: 24px;
+}
+
+.sim-content__upper {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+}
+
+/* --- 出走馬テーブル --- */
+.sim-entry-table {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.sim-entry-table__title {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 18px;
+}
+
+.sim-entry-table__table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.sim-entry-table__table thead tr {
+    text-align: left;
+    font-size: 14px;
+    color: #64748b;
+    border-bottom: 2px solid #f1f5f9;
+}
+
+.sim-entry-table__table thead th {
+    padding: 12px 8px;
+    font-weight: 600;
+}
+
+.sim-entry-table__table tbody tr {
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.sim-entry-table__bracket {
+    padding: 12px 8px;
+}
+
+.sim-entry-table__bracket-sub {
+    font-size: 12px;
+    color: #64748b;
+    margin-right: 4px;
+}
+
+.sim-entry-table__bracket-main {
+    font-size: 16px;
+}
+
+.sim-entry-table__name {
+    padding: 12px 8px;
+}
+
+.sim-entry-table__horse-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.sim-entry-table__horse-meta {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.sim-entry-table__jockey {
+    padding: 12px 8px;
+    font-size: 14px;
+}
+
+.sim-entry-table__style {
+    padding: 12px 8px;
+}
+
+.sim-entry-table__style-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    background-color: #f1f5f9;
+    color: #475569;
+    font-weight: bold;
+}
+
+.sim-entry-table__odds {
+    padding: 12px 8px;
+}
+
+.sim-entry-table__odds-value {
+    font-weight: bold;
+    color: #1e293b;
+}
+
+.sim-entry-table__odds-value--hot {
+    color: #e11d48;
+}
+
+.sim-entry-table__popularity {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.sim-entry-table__result {
+    padding: 12px 8px;
+    font-size: 14px;
+}
+
+.sim-entry-table__result-detail {
+    display: flex;
+    flex-direction: column;
+}
+
+.sim-entry-table__result-position {
+    font-weight: bold;
+}
+
+.sim-entry-table__result-time {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.sim-entry-table__result-status {
+    color: #ef4444;
+    font-weight: bold;
+}
+
+/* --- アニメーション --- */
+@keyframes sim-slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
