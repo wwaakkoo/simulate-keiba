@@ -91,13 +91,39 @@ export class SimulationEngine {
 
         // 各馬の速度を算出
         this._speeds = horses.map((h) => {
-            const speedStat = h.analysis?.stats.speed ?? 50;
-            return BASE_SPEED_PER_FRAME + (speedStat - 50) * SPEED_ADJUSTMENT_FACTOR;
+            // 実データ（結果）がある場合はそれを利用する "Result Mode"
+            // finish_time (秒換算) があるかどうか
+            if (h.entry.finish_time) {
+                // finish_time は "1:23.4" などの形式かもしれないし、秒数かもしれない
+                // ここでは単純化のため、別途パースが必要だが、EntryResponseの型定義ではstring
+                // Phase C-1 で詳細実装するが、まずは既存ロジックの延長で対応
+                // 実データがある場合、そのタイムでゴールするように逆算するべきだが
+                // 現状は簡易的にスピード指数を使用
+            }
+
+            const hasData = h.analysis && h.analysis.stats.races_count > 0;
+            let speedStat = h.analysis?.stats.speed ?? 50;
+
+            if (!hasData) {
+                // データがない場合は 40~60 の間でランダム化
+                speedStat = 40 + Math.random() * 20;
+            }
+
+            // 常にわずかなランダムノイズを加える (±2程度)
+            const noise = (Math.random() - 0.5) * 4;
+            const finalSpeed = speedStat + noise;
+
+            return BASE_SPEED_PER_FRAME + (finalSpeed - 50) * SPEED_ADJUSTMENT_FACTOR;
         });
 
         // 脚質ファクター
         this._styleFactors = horses.map((h) => {
-            const style = h.analysis?.style ?? "UNKNOWN";
+            let style = h.analysis?.style ?? "UNKNOWN";
+            if (style === "UNKNOWN") {
+                // UNKNOWNの場合はランダムに割り当てる
+                const styles = ["NIGE", "SENKO", "SASHI", "OIKOMI"];
+                style = styles[Math.floor(Math.random() * styles.length)];
+            }
             return getStyleFactor(style);
         });
     }

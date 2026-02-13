@@ -59,19 +59,8 @@ export function useRaceData(): UseRaceDataReturn {
             const detail = await raceApi.getRaceDetail(raceId);
             setRaceDetail(detail);
 
-            const analyses: Record<string, HorseAnalysisResponse> = {};
-            await Promise.all(
-                detail.entries.map(async (entry) => {
-                    try {
-                        const analysis = await raceApi.getHorseAnalysis(
-                            entry.horse.horse_id,
-                        );
-                        analyses[entry.horse.horse_id] = analysis;
-                    } catch {
-                        // 分析が取得できない馬はスキップ
-                    }
-                }),
-            );
+            // 一括取得APIを使用
+            const analyses = await raceApi.getRaceAnalysis(raceId);
             setHorseAnalyses(analyses);
         } catch (e: unknown) {
             // eslint-disable-next-line no-console

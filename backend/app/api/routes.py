@@ -191,6 +191,43 @@ async def get_horse(
     )
 
 
+
+import asyncio
+
+@router.get("/races/{race_id}/analysis", response_model=dict[str, HorseAnalysisResponse])
+async def analyze_race_horses(
+    race_id: str,
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, HorseAnalysisResponse]:
+    """レースに出走する全馬の分析データを一括取得する"""
+    # レースと出走馬を取得
+    stmt = (
+        select(Race)
+        .where(Race.race_id == race_id)
+        .options(selectinload(Race.entries).selectinload(RaceEntry.horse))
+    )
+    result = await session.execute(stmt)
+    race = result.scalar_one_or_none()
+
+    if race is None:
+        raise HTTPException(status_code=404, detail=f"Race {race_id} not found")
+
+    # 各馬のスペック分析を並列実行
+    async def _analyze_entry(entry: RaceEntry) -> tuple[str, HorseAnalysisResponse]:
+        # analyze_horse_stats のロジックを再利用したいが、Dependsが使えないため
+        # 内部ロジックを切り出した関数を呼び出す形にするか、
+        # ここで直接処理を書く
+        # 今回はコード重複を避けるため、内部関数 _get_horse_analysis_logic を定義して共有する
+        analysis = await _get_horse_analysis_logic(entry.horse, session)
+        return entry.horse.horse_id, analysis
+
+    # 並列実行
+    tasks = [_analyze_entry(entry) for entry in race.entries]
+    results = await asyncio.gather(*tasks)
+    
+    return dict(results)
+
+
 @router.get("/analysis/horses/{horse_id}", response_model=HorseAnalysisResponse)
 async def analyze_horse_stats(
     horse_id: str,
@@ -205,11 +242,16 @@ async def analyze_horse_stats(
     if not horse:
         raise HTTPException(status_code=404, detail="Horse not found")
 
+    return await _get_horse_analysis_logic(horse, session)
+
+
+async def _get_horse_analysis_logic(horse: Horse, session: AsyncSession) -> HorseAnalysisResponse:
+    """馬の分析ロジック（共通化）"""
     # 過去レースの出走結果を取得 (新しい順)
     async def _get_entries():
         entry_stmt = (
             select(RaceEntry)
-            .where(RaceEntry.horse_id == horse.id)
+            .where(RaceEntry.horse_id == horse.horse_id)
             .join(Race)
             .options(selectinload(RaceEntry.race))
             .order_by(Race.date.desc())
@@ -221,12 +263,10 @@ async def analyze_horse_stats(
 
     # 履歴が1件以下（現レースのみ等）の場合は、自動的にスクレイプを試みる
     if len(entries) <= 1:
-        logger.info("Insufficient data for horse %s (%s), scraping history...", horse.horse_id, horse.name)
+        # logger.info("Insufficient data for horse %s (%s), scraping history...", horse.horse_id, horse.name)
         service = ScraperService(session)
         try:
             await service.scrape_horse_history(horse.horse_id)
-            # スクレイプ後に再取得
-            # session をリフレッシュする必要があるかもしれないが、一旦再検索で試す
             entries = await _get_entries()
         except Exception as e:
             logger.warning("Failed to scrape horse history for %s: %s", horse.horse_id, str(e))
@@ -236,11 +276,9 @@ async def analyze_horse_stats(
     # 脚質判定
     style = determine_running_style(entries)
     
-    # 簡易スタッツ計算 (TODO: 機械学習モデルへの置き換え)
-    # スピード: 上がり3Fの平均からざっくりスコア化 (小さい方が速い)
+    # 簡易スタッツ計算
     last_3f_list = [e.last_3f for e in entries if e.last_3f]
     avg_3f = sum(last_3f_list) / len(last_3f_list) if last_3f_list else 36.0
-    # 33.0秒 -> 100点, 40.0秒 -> 30点 くらいの線形変換
     speed_score = max(30.0, min(100.0, 100.0 - (avg_3f - 33.0) * 10))
 
     return HorseAnalysisResponse(
@@ -249,8 +287,8 @@ async def analyze_horse_stats(
         style=style.value,
         stats={
             "speed": float(f"{speed_score:.1f}"),
-            "stamina": 80.0,  # 仮
-            "start_dash": 75.0,  # 仮
-            "races_count": float(len(entries)),
+            "stamina": 80.0,
+            "start_dash": 75.0,
+            "races_count": len(entries),
         },
     )
