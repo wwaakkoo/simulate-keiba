@@ -70,3 +70,5 @@ temp/
 *.pkl
 *.joblib
 models/*.pkl
+
+.playwright-mcp/
