@@ -32,8 +32,12 @@ import { SIMULATION_CONFIG } from "./config";
 import { RaceSelector } from "./components/RaceSelector";
 import { SimControls } from "./components/SimControls";
 import { RaceInfo } from "./components/RaceInfo";
-import { RankingPanel } from "./components/RankingPanel";
+// import { RankingPanel } from "./components/RankingPanel";
+import { LiveRanking } from "./components/LiveRanking";
 import { EntryTable } from "./components/EntryTable";
+import { PredictionPanel } from "./components/PredictionPanel";
+import { apiClient } from "../api/client";
+import type { PredictionResponse } from "../types/prediction";
 
 import "./RaceSimulator.css";
 
@@ -58,7 +62,7 @@ export const RaceSimulator = () => {
     duration,
     isPlaying,
     playbackSpeed,
-    play,
+    // play,
     pause,
     togglePlay,
     seek,
@@ -68,12 +72,16 @@ export const RaceSimulator = () => {
   } = useSimulation();
 
   const [simResults, setSimResults] = useState<SimResult[]>([]);
+  const [progress, setProgress] = useState<number[]>([]);
+
+  // Prediction State
+  const [predictionData, setPredictionData] = useState<PredictionResponse | null>(null);
+  const [isPredicting, setIsPredicting] = useState(false);
+  const [predictionError, setPredictionError] = useState<Error | null>(null);
 
   // Ref: Ticker コールバック内で参照するため
   const simResultsRef = useRef<SimResult[]>([]);
   const horsesRef = useRef<HorseSprite[]>([]);
-  // tickerCbRef は新しい ticker 管理ロジックでは不要になるが、一旦残す
-  const tickerCbRef = useRef<((ticker: Ticker) => void) | null>(null);
 
   // onSpeedChange wrapper
   const handleSpeedChange = useCallback((speed: number) => {
@@ -206,6 +214,7 @@ export const RaceSimulator = () => {
       // useSimulation の setElapsedTime を使って時間を同期
       if (ticker.deltaMS > 0 && ticker.lastTime % 10 < 1) { // 約100msごとに更新
         setElapsedTime(engine.getTime());
+        setProgress([...engine.getProgress()]);
       }
     };
 
@@ -228,10 +237,26 @@ export const RaceSimulator = () => {
       seek(0);
       setSimResults([]);
       simResultsRef.current = [];
+      setPredictionData(null);
+      setPredictionError(null);
       selectRace(raceId);
     },
     [selectRace, pause, seek],
   );
+
+  const handlePredict = useCallback(async () => {
+    if (!selectedRaceId) return;
+    setIsPredicting(true);
+    setPredictionError(null);
+    try {
+      const data = await apiClient.predictRace(selectedRaceId);
+      setPredictionData(data);
+    } catch (e) {
+      setPredictionError(e instanceof Error ? e : new Error("Prediction failed"));
+    } finally {
+      setIsPredicting(false);
+    }
+  }, [selectedRaceId]);
 
   // ─── レンダリング ─────────────────────────────
 
@@ -286,9 +311,16 @@ export const RaceSimulator = () => {
         <div className="sim-content">
           <div className="sim-content__upper">
             <RaceInfo raceDetail={raceDetail} />
-            <RankingPanel
-              simResults={simResults}
+            <LiveRanking
               entries={raceDetail.entries}
+              progress={progress}
+              totalDistance={raceDetail.distance}
+            />
+            <PredictionPanel
+              data={predictionData}
+              isLoading={isPredicting}
+              error={predictionError}
+              onPredict={handlePredict}
             />
           </div>
           <EntryTable

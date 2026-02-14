@@ -1,0 +1,100 @@
+.prediction-panel {
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 1rem;
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
+    max-width: 400px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.panel-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #fbaceb;
+    /* Accent color */
+}
+
+.predict-button {
+    background: linear-gradient(135deg, #6e8efb, #a777e3);
+    border: none;
+    padding: 0.5rem 1rem;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: opacity 0.2s;
+}
+
+.predict-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.error-message {
+    color: #ff6b6b;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.model-info {
+    font-size: 0.8rem;
+    color: #ccc;
+    margin-bottom: 0.5rem;
+    text-align: right;
+}
+
+.prediction-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.prediction-table th {
+    text-align: left;
+    padding: 0.5rem;
+    color: #aaa;
+    font-weight: normal;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.prediction-table td {
+    padding: 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.mark-cell {
+    font-weight: bold;
+    color: #ffd700;
+    /* Gold for marks */
+    text-align: center;
+}
+
+.rank-1 .mark-cell {
+    color: #ff4d4d;
+    /* Red for Favorite */
+}
+
+.rank-2 .mark-cell {
+    color: #ffa500;
+    /* Orange */
+}
+
+.rank-3 .mark-cell {
+    color: #ffd700;
+    /* Gold */
+}
+
+.horse-name {
+    max-width: 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

@@ -104,3 +104,20 @@ class HorseAnalysisResponse(BaseModel):
     name: str = ""
     style: str  # NIGE, SENKO, SASHI, OIKOMI, UNKNOWN
     stats: dict[str, float]  # speed, stamina, etc.
+
+
+class PredictionItem(BaseModel):
+    """各馬の予測結果"""
+    horse_name: str
+    horse_number: int
+    predicted_position: float
+    predicted_rank: int
+    mark: str
+
+
+class PredictionResponse(BaseModel):
+    """予測APIレスポンス"""
+    race_id: str
+    predictions: list[PredictionItem]
+    model_version: str
+    method: str

@@ -40,6 +40,8 @@ app.add_middleware(
 
 # ルーター登録
 app.include_router(api_router)
+from app.api.endpoints.predict import router as predict_router
+app.include_router(predict_router, prefix="/api")
 
 
 @app.get("/api/health")

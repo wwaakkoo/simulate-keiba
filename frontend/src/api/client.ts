@@ -1,8 +1,6 @@
-/**
- * バックエンドAPIとの通信を行うクライアント
- */
+import type { PredictionResponse } from "../types/prediction";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 interface ApiResponse<TData> {
     data: TData;
@@ -55,5 +53,10 @@ export const apiClient = {
         fetchApi<TData>(endpoint, {
             method: 'POST',
             body: JSON.stringify(body),
+        }),
+
+    predictRace: (raceId: string) =>
+        fetchApi<PredictionResponse>(`/races/${raceId}/predict`, {
+            method: 'POST',
         }),
 };
