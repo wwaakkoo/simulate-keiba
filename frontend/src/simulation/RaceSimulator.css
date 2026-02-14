@@ -48,99 +48,97 @@
 }
 
 /* --- コントロール群 --- */
-.sim-controls {
+.sim-controls-container {
     display: flex;
-    gap: 12px;
+    flex-direction: column;
+    gap: 8px;
+    background: #f8fafc;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.sim-progress-row {
+    display: flex;
     align-items: center;
+    gap: 12px;
+}
+
+.sim-time-display {
+    font-family: monospace;
+    font-size: 14px;
+    min-width: 80px;
+    color: #334155;
+}
+
+.sim-seek-range {
+    flex: 1;
+    cursor: pointer;
+}
+
+.sim-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.sim-play-btn,
+.sim-reset-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid #cbd5e1;
+    border-radius: 50%;
+    background: white;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.sim-play-btn:hover:not(:disabled),
+.sim-reset-btn:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.sim-play-btn:disabled,
+.sim-reset-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.sim-divider {
+    width: 1px;
+    height: 24px;
+    background: #cbd5e1;
+    margin: 0 4px;
 }
 
 .sim-speed-group {
     display: flex;
     background: #f1f5f9;
-    border-radius: 8px;
-    padding: 4px;
+    border-radius: 6px;
+    padding: 2px;
 }
 
 .sim-speed-btn {
-    padding: 4px 12px;
-    border-radius: 6px;
+    padding: 4px 10px;
+    border-radius: 4px;
     border: none;
     background: transparent;
     color: #64748b;
-    font-size: 13px;
-    font-weight: normal;
+    font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
 }
 
 .sim-speed-btn--active {
     background: white;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
     color: #2563eb;
-    font-weight: bold;
-}
-
-.sim-start-btn {
-    padding: 8px 20px;
-    background: #2563eb;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.2s;
-}
-
-.sim-start-btn:hover:not(:disabled) {
-    background: #1d4ed8;
-}
-
-.sim-start-btn--disabled,
-.sim-start-btn:disabled {
-    background: #cbd5e1;
-    cursor: default;
-}
-
-.sim-reset-btn {
-    padding: 10px 24px;
-    border-radius: 8px;
-    border: 1px solid #cbd5e1;
-    background-color: white;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.sim-reset-btn:hover {
-    background-color: #f8fafc;
-}
-
-/* --- キャンバス --- */
-.sim-canvas {
-    display: flex;
-    justify-content: center;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #2e8b57;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-    padding: 16px;
-    margin: 0 auto;
-    width: max-content;
-}
-
-.sim-canvas--hidden {
-    display: none;
-}
-
-/* --- ローディング --- */
-.sim-loading {
-    text-align: center;
-    padding: 40px;
-    font-size: 18px;
-    color: #64748b;
 }
 
 /* --- レース情報パネル --- */
