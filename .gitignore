@@ -71,4 +71,14 @@ temp/
 *.joblib
 models/*.pkl
 
+
+# =====================
+# デバッグ用ファイル
+# =====================
+debug_*.html
+debug_*.txt
+check_*.txt
+inspect_*.py
+verify_*.py
+
 .playwright-mcp/
