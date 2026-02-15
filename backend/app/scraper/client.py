@@ -124,7 +124,8 @@ class ScraperClient:
         Args:
             date_str: "YYYYMMDD" 形式の日付文字列
         """
-        url = f"{NETKEIBA_BASE_URL}/?pid=race_list&kaisai_date={date_str}"
+        # db.netkeiba.com の形式を使用
+        url = f"{NETKEIBA_BASE_URL}/race/list/{date_str}/"
         return await self.fetch_page(url)
 
     async def fetch_horse_page(self, horse_id: str) -> str:

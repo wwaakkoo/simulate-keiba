@@ -12,21 +12,35 @@ from app.models.race import Race
 
 router = APIRouter(prefix="/races", tags=["predictions"])
 
-# Load model globally
-MODEL_PATH = 'models/race_predictor_v1.pkl'
-MODEL = None
+# Load models globally
+MODEL_LGB = None
+MODEL_XGB = None
 
-if os.path.exists(MODEL_PATH):
+if os.path.exists('models/race_predictor_lgb.pkl'):
     try:
-        MODEL = lgb.Booster(model_file=MODEL_PATH)
-        print(f"Model loaded from {MODEL_PATH}")
+        MODEL_LGB = lgb.Booster(model_file='models/race_predictor_lgb.pkl')
+        print("LGB model loaded")
     except Exception as e:
-        print(f"Failed to load model: {e}")
+        print(f"Failed to load LGB model: {e}")
+
+if os.path.exists('models/race_predictor_xgb.json'):
+    try:
+        import xgboost as xgb
+        MODEL_XGB = xgb.XGBRanker()
+        MODEL_XGB.load_model('models/race_predictor_xgb.json')
+        print("XGB model loaded")
+    except Exception as e:
+        print(f"Failed to load XGB model: {e}")
+
+# Fallback for v1
+if not MODEL_LGB and os.path.exists('models/race_predictor_v1.pkl'):
+    MODEL_LGB = lgb.Booster(model_file='models/race_predictor_v1.pkl')
+
 
 def _predict_sync(race_id_str: str) -> dict:
     """Synchronous prediction logic to be run in executor"""
-    if MODEL is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+    if MODEL_LGB is None and MODEL_XGB is None:
+        raise HTTPException(status_code=503, detail="No models loaded")
         
     db = SessionLocal()
     try:
@@ -47,25 +61,38 @@ def _predict_sync(race_id_str: str) -> dict:
             raise HTTPException(status_code=400, detail="Could not generate features for this race")
             
         X = np.array(result['features'])
-        predictions = MODEL.predict(X)
         
-        # Sort indices by predicted position (asc)
-        sorted_indices = np.argsort(predictions)
+        lgb_scores = MODEL_LGB.predict(X) if MODEL_LGB else np.zeros(len(X))
+        xgb_scores = MODEL_XGB.predict(X) if MODEL_XGB else np.zeros(len(X))
+        
+        def normalize(scores):
+            if np.max(scores) == np.min(scores): return scores
+            return (scores - np.min(scores)) / (np.max(scores) - np.min(scores))
+            
+        # Weighted Ensemble (60% LGB, 40% XGB as a heuristic)
+        # If one is missing, use the other 100%
+        if MODEL_LGB and MODEL_XGB:
+            predictions = 0.6 * normalize(lgb_scores) + 0.4 * normalize(xgb_scores)
+            method = "ensemble_lgb_xgb"
+        elif MODEL_LGB:
+            predictions = lgb_scores
+            method = "lightgbm_lambdarank"
+        else:
+            predictions = xgb_scores
+            method = "xgboost_lambdarank"
+
+        # Sort indices by score (descending for ranking)
+        sorted_indices = np.argsort(-predictions)
         
         marks = ['◎', '○', '▲', '△']
         
         prediction_items = []
         
-        # We need to map sorted indices back to original indices to build the response list.
-        # However, the user wants a list of predictions for each horse.
-        # Better to return a list where order doesn't matter (client can match by horse_number) 
-        # OR return sorted list. The schema has `predicted_rank`.
-        
         # Create a mapping from index to rank/mark
         rank_map = {idx: i for i, idx in enumerate(sorted_indices)}
         
         for i in range(len(predictions)):
-            # "i" is the original index in result['features'] and result['horse_names']
+            # "i" is the original index in result['features']
             
             rank = rank_map[i] + 1
             mark = marks[rank_map[i]] if rank_map[i] < len(marks) else ""
@@ -86,8 +113,8 @@ def _predict_sync(race_id_str: str) -> dict:
         return {
             "race_id": race_id_str,
             "predictions": prediction_items,
-            "model_version": "v1",
-            "method": "lightgbm_regression_mvp"
+            "model_version": "v1-ensemble",
+            "method": method
         }
         
     finally:

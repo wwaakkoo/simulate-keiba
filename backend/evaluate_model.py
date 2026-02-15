@@ -16,24 +16,40 @@ def evaluate():
     db = SessionLocal()
     factory = FeatureFactory(db)
     
-    # Load model
-    model_path = 'models/race_predictor_v1.pkl'
-    if not os.path.exists(model_path):
-        print(f"Model not found at {model_path}")
+    # Load models
+    lgb_path = 'models/race_predictor_lgb.pkl'
+    xgb_path = 'models/race_predictor_xgb.json'
+    
+    lgb_model = None
+    xgb_model = None
+    
+    if os.path.exists(lgb_path):
+        import lightgbm as lgb_lib
+        lgb_model = lgb_lib.Booster(model_file=lgb_path)
+        print("Loaded LightGBM model")
+    
+    if os.path.exists(xgb_path):
+        import xgboost as xgb_lib
+        xgb_model = xgb_lib.XGBRanker()
+        xgb_model.load_model(xgb_path)
+        print("Loaded XGBoost model")
+        
+    if not lgb_model and not xgb_model:
+        print("No models found.")
         return
     
-    model = lgb.Booster(model_file=model_path)
-    
-    # Get test races (latest 10% as in trainer)
+    # Get test races
     races = db.query(Race).order_by(Race.date).all()
     n = len(races)
     test_races = races[int(n * 0.9):]
     
     print(f"Evaluating on {len(test_races)} test races...")
     
-    win_hits = 0
-    top3_hits = 0
-    correlations = []
+    results = {
+        'lgb': {'win_hits': 0, 'top3_hits': 0},
+        'xgb': {'win_hits': 0, 'top3_hits': 0},
+        'ensemble': {'win_hits': 0, 'top3_hits': 0}
+    }
     total_races = 0
     
     for race in test_races:
@@ -43,52 +59,59 @@ def evaluate():
                 continue
             
             X = np.array(result['features'])
-            preds = model.predict(X)
-            
-            # Get actual positions
             actuals = []
             for horse_num in result['horse_numbers']:
                 entry = next((e for e in race.entries if e.horse_number == horse_num), None)
-                if entry and entry.finish_position is not None:
-                    actuals.append(entry.finish_position)
-                else:
-                    actuals.append(9.0) # Placeholder
+                actuals.append(entry.finish_position if (entry and entry.finish_position is not None) else 99)
+
+            def get_hits(preds, actuals):
+                top_idx = np.argmax(preds)
+                win = 1 if actuals[top_idx] == 1 else 0
+                top3 = 1 if actuals[top_idx] <= 3 else 0
+                return win, top3
+
+            def normalize(scores):
+                if np.max(scores) == np.min(scores): return scores
+                return (scores - np.min(scores)) / (np.max(scores) - np.min(scores))
+
+            preds_lgb = lgb_model.predict(X) if lgb_model else None
+            preds_xgb = xgb_model.predict(X) if xgb_model else None
             
-            # 1. Win Rate (Is the horse with lowest predicted position the actual winner?)
-            top_pred_idx = np.argmin(preds)
-            actual_rank_of_top_pred = actuals[top_pred_idx]
-            
-            if actual_rank_of_top_pred == 1:
-                win_hits += 1
-            
-            if actual_rank_of_top_pred <= 3:
-                top3_hits += 1
+            if preds_lgb is not None:
+                win, top3 = get_hits(preds_lgb, actuals)
+                results['lgb']['win_hits'] += win
+                results['lgb']['top3_hits'] += top3
                 
-            # Spearman correlation
-            corr, _ = spearmanr(preds, actuals)
-            if not np.isnan(corr):
-                correlations.append(corr)
+            if preds_xgb is not None:
+                win, top3 = get_hits(preds_xgb, actuals)
+                results['xgb']['win_hits'] += win
+                results['xgb']['top3_hits'] += top3
+                
+            if preds_lgb is not None and preds_xgb is not None:
+                # Weighted Ensemble
+                ens_preds = 0.6 * normalize(preds_lgb) + 0.4 * normalize(preds_xgb)
+                win, top3 = get_hits(ens_preds, actuals)
+                results['ensemble']['win_hits'] += win
+                results['ensemble']['top3_hits'] += top3
             
             total_races += 1
         except Exception as e:
-            # print(f"Error in race {race.id}: {e}")
+            # print(f"Error: {e}")
             continue
             
     if total_races > 0:
-        win_rate = win_hits / total_races
-        top3_rate = top3_hits / total_races
-        avg_corr = np.mean(correlations)
-        
         print("\n=== Evaluation Results ===")
         print(f"Total Test Races: {total_races}")
-        print(f"Win Rate (Top Predicted): {win_rate:.1%}")
-        print(f"Top 3 Inclusion Rate: {top3_rate:.1%}")
-        print(f"Spearman Rank Correlation: {avg_corr:.3f}")
+        for key in ['lgb', 'xgb', 'ensemble']:
+            w = results[key]['win_hits'] / total_races
+            t3 = results[key]['top3_hits'] / total_races
+            print(f"[{key.upper()}] Win Rate: {w:.1%}, Top 3 Rate: {t3:.1%}")
         print("===========================")
-    else:
-        print("No races could be evaluated.")
     
     db.close()
+
+if __name__ == "__main__":
+    evaluate()
 
 if __name__ == "__main__":
     evaluate()

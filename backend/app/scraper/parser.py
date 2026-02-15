@@ -537,7 +537,81 @@ def parse_horse_page(html: str, horse_id: str) -> ParsedHorsePage:
             dam = blood_links[1].get_text(strip=True)
 
     history: list[ParsedHorseHistoryEntry] = []
-    
+    history_table = soup.select_one("table.db_h_race_results")
+    if history_table:
+        rows = history_table.select("tr")[1:] # Skip header
+        for row in rows:
+            cells = row.select("td")
+            if len(cells) < 20: continue
+            
+            try:
+                # 0:日付, 1:開催, 2:天気, 3:R, 4:レース名, 5:映像, 6:頭数, 7:枠番, 8:馬番, 9:オッズ, 10:人気, 11:着順 ...
+                race_link = cells[4].select_one("a")
+                if not race_link: continue
+                race_id_match = re.search(r"/race/(\d+)", race_link.get("href", ""))
+                if not race_id_match: continue
+                
+                # Date: 2024/05/19 -> 2024-05-19
+                raw_date = cells[0].get_text(strip=True)
+                date_str = raw_date.replace("/", "-")
+                
+                # Distance/Course: 芝2400
+                dist_course = cells[14].get_text(strip=True)
+                dc_match = re.match(r"(芝|ダ|障)(\d+)", dist_course)
+                course_type = "芝"
+                distance = 1600
+                if dc_match:
+                    ctype_jp = dc_match.group(1)
+                    distance = int(dc_match.group(2))
+                    if ctype_jp == "ダ": course_type = "ダート"
+                    elif ctype_jp == "障": course_type = "障害"
+
+                # Status & Position
+                pos_text = cells[11].get_text(strip=True)
+                status = "result"
+                finish_position = None
+                if pos_text.isdigit():
+                    finish_position = int(pos_text)
+                elif "取" in pos_text: status = "scratched"
+                elif "除" in pos_text: status = "excluded"
+                elif "中" in pos_text: status = "dnf"
+                
+                # Weight
+                weight_text = cells[23].get_text(strip=True)
+                h_weight = None
+                h_weight_diff = None
+                w_match = re.search(r"(\d+)\(([-+]?\d+)\)", weight_text)
+                if w_match:
+                    h_weight = int(w_match.group(1))
+                    h_weight_diff = int(w_match.group(2))
+
+                entry = ParsedHorseHistoryEntry(
+                    race_id=race_id_match.group(1),
+                    date=date_str,
+                    venue=cells[1].get_text(strip=True),
+                    race_name=cells[4].get_text(strip=True),
+                    horse_number=_safe_int(cells[8].get_text(strip=True)) or 0,
+                    bracket_number=_safe_int(cells[7].get_text(strip=True)),
+                    odds=_safe_float(cells[9].get_text(strip=True)),
+                    popularity=_safe_int(cells[10].get_text(strip=True)),
+                    finish_position=finish_position,
+                    jockey=cells[12].get_text(strip=True),
+                    weight_carried=_safe_float(cells[13].get_text(strip=True)),
+                    distance=distance,
+                    course_type=course_type,
+                    track_condition=cells[15].get_text(strip=True),
+                    finish_time=cells[17].get_text(strip=True) or None,
+                    margin=cells[18].get_text(strip=True) or None,
+                    passing_order=cells[20].get_text(strip=True) or None,
+                    last_3f=_safe_float(cells[22].get_text(strip=True)),
+                    horse_weight=h_weight,
+                    horse_weight_diff=h_weight_diff,
+                    status=status
+                )
+                history.append(entry)
+            except Exception:
+                continue
+
     return ParsedHorsePage(
         horse_id=horse_id,
         name=name,

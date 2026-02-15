@@ -213,19 +213,17 @@ async def analyze_race_horses(
         raise HTTPException(status_code=404, detail=f"Race {race_id} not found")
 
     # 各馬のスペック分析を並列実行
-    async def _analyze_entry(entry: RaceEntry) -> tuple[str, HorseAnalysisResponse]:
-        # analyze_horse_stats のロジックを再利用したいが、Dependsが使えないため
-        # 内部ロジックを切り出した関数を呼び出す形にするか、
-        # ここで直接処理を書く
-        # 今回はコード重複を避けるため、内部関数 _get_horse_analysis_logic を定義して共有する
-        analysis = await _get_horse_analysis_logic(entry.horse, session)
-        return entry.horse.horse_id, analysis
-
-    # 並列実行
-    tasks = [_analyze_entry(entry) for entry in race.entries]
-    results = await asyncio.gather(*tasks)
-    
-    return dict(results)
+    # Create service once to share client session
+    service = ScraperService(session)
+    try:
+        results = []
+        for entry in race.entries:
+            analysis = await _get_horse_analysis_logic(entry.horse, session, service=service)
+            results.append((entry.horse.horse_id, analysis))
+        
+        return dict(results)
+    finally:
+        await service.close()
 
 
 @router.get("/analysis/horses/{horse_id}", response_model=HorseAnalysisResponse)
@@ -245,7 +243,7 @@ async def analyze_horse_stats(
     return await _get_horse_analysis_logic(horse, session)
 
 
-async def _get_horse_analysis_logic(horse: Horse, session: AsyncSession) -> HorseAnalysisResponse:
+async def _get_horse_analysis_logic(horse: Horse, session: AsyncSession, service: ScraperService | None = None) -> HorseAnalysisResponse:
     """馬の分析ロジック（共通化）"""
     # 過去レースの出走結果を取得 (新しい順)
     async def _get_entries():
@@ -264,14 +262,15 @@ async def _get_horse_analysis_logic(horse: Horse, session: AsyncSession) -> Hors
     # 履歴が1件以下（現レースのみ等）の場合は、自動的にスクレイプを試みる
     if len(entries) <= 1:
         # logger.info("Insufficient data for horse %s (%s), scraping history...", horse.horse_id, horse.name)
-        service = ScraperService(session)
+        local_service = service or ScraperService(session)
         try:
-            await service.scrape_horse_history(horse.horse_id)
+            await local_service.scrape_horse_history(horse.horse_id)
             entries = await _get_entries()
         except Exception as e:
             logger.warning("Failed to scrape horse history for %s: %s", horse.horse_id, str(e))
         finally:
-            await service.close()
+            if service is None: # Only close if we created it locally
+                await local_service.close()
 
     # 脚質判定
     style = determine_running_style(entries)
