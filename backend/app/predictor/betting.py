@@ -118,3 +118,129 @@ class KellyBettingStrategy:
             })
             
         return results
+
+class VarianceReductionStrategy:
+    """
+    分散を抑えるための複数のベッティング戦略を提供するクラス
+    """
+    def __init__(self, strategy_type: str = 'low_variance'):
+        self.strategy_type = strategy_type
+        
+    def evaluate(self, predictions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if self.strategy_type == 'low_variance':
+            return self._low_variance_strategy(predictions)
+        elif self.strategy_type == 'high_volume':
+            return self._high_volume_strategy(predictions)
+        elif self.strategy_type == 'diversified':
+            return self._diversified_strategy(predictions)
+        else:
+            return []
+
+    def _low_variance_strategy(self, predictions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        戦略1: 低オッズ（本命寄り）に集中
+        オッズ3.0倍以下、EV > 1.3
+        """
+        results = []
+        candidates = [p for p in predictions if p.get('odds', 999) <= 3.0]
+        
+        if not candidates:
+            return self._return_empty_results(predictions)
+            
+        best_bet = None
+        max_ev = -1
+        
+        for p in candidates:
+            prob = p.get('win_prob', 0.0)
+            odds = p.get('odds', 0.0)
+            ev = prob * odds
+            
+            if ev > 1.3:
+                if ev > max_ev:
+                    max_ev = ev
+                    best_bet = p
+        
+        # 結果構築 (他はSKIP)
+        for p in predictions:
+            is_target = (best_bet and p['horse_number'] == best_bet['horse_number'])
+            results.append({
+                **p,
+                'expected_value': p.get('win_prob', 0) * p.get('odds', 0),
+                'bet_amount': 1000 if is_target else 0, # 固定額 or 資金管理? 今は簡易的に固定
+                'recommendation': 'BUY' if is_target else 'SKIP',
+                'strategy': 'low_variance'
+            })
+            
+        return results
+
+    def _high_volume_strategy(self, predictions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        戦略2: ベット数を増やす（基準を緩和）
+        EV > 1.15 の上位3頭
+        """
+        results = []
+        # EV計算
+        for p in predictions:
+            p['temp_ev'] = p.get('win_prob', 0) * p.get('odds', 0)
+            
+        # EV > 1.15 フィルタ
+        candidates = [p for p in predictions if p['temp_ev'] > 1.15]
+        
+        # 上位3頭
+        candidates.sort(key=lambda x: x['temp_ev'], reverse=True)
+        top3_ids = {p['horse_number'] for p in candidates[:3]}
+        
+        for p in predictions:
+            is_target = p['horse_number'] in top3_ids
+            results.append({
+                **p,
+                'expected_value': p['temp_ev'],
+                'bet_amount': 500 if is_target else 0,
+                'recommendation': 'BUY' if is_target else 'SKIP',
+                'strategy': 'high_volume'
+            })
+            
+        return results
+
+    def _diversified_strategy(self, predictions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        戦略3: 分散投資 (単勝 + 複勝想定)
+        ※ 現在のシステムは単勝メインだが、シミュレーション用に推奨情報を付与
+        """
+        # 単勝本命
+        results = []
+        sorted_preds = sorted(predictions, key=lambda x: x.get('win_prob', 0) * x.get('odds', 0), reverse=True)
+        if not sorted_preds:
+            return self._return_empty_results(predictions)
+            
+        main_bet = sorted_preds[0]
+        main_ev = main_bet.get('win_prob', 0) * main_bet.get('odds', 0)
+        
+        for p in predictions:
+            res = {
+                **p,
+                'expected_value': p.get('win_prob', 0) * p.get('odds', 0),
+                'bet_amount': 0,
+                'bet_type': [],
+                'recommendation': 'SKIP'
+            }
+            
+            # 単勝
+            if p == main_bet and main_ev > 1.25:
+                res['bet_amount'] += 1000
+                res['bet_type'].append('WIN')
+                res['recommendation'] = 'BUY'
+                
+            # 複勝 (簡易ロジック: 上位人気でオッズがついている場合)
+            # ※ 複勝オッズや確率はここにはないかもしれないが、簡易的に
+            if p.get('win_prob', 0) > 0.2 and p.get('odds', 0) > 5.0: # 穴っぽい
+                 # 複勝適正ありとみなす
+                 pass
+            
+            results.append(res)
+            
+        return results
+
+    def _return_empty_results(self, predictions):
+        return [{**p, 'bet_amount': 0, 'recommendation': 'SKIP'} for p in predictions]
+
