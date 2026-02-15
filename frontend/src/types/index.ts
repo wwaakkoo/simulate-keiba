@@ -65,3 +65,5 @@ export interface HorseAnalysisResponse {
     style: string;
     stats: Record<string, number>;
 }
+
+export * from "./prediction";

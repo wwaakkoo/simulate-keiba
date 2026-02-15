@@ -43,9 +43,9 @@ def train_model():
                     print(f"DEBUG: Race {race.id} has {len(race.entries)} entries")
 
                 result = factory.generate_features_for_race(race.id)
-                for features, horse_name in zip(result['features'], result['horse_names']):
-                    # ...
-                    entry = next((e for e in race.entries if (e.horse and e.horse.name == horse_name)), None)
+                for features, horse_num in zip(result['features'], result['horse_numbers']):
+                    # Match by horse_number (safer than name)
+                    entry = next((e for e in race.entries if e.horse_number == horse_num), None)
                     
                     if entry and entry.finish_position is not None:
                         X.append(features)

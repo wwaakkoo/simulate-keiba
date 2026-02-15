@@ -1,14 +1,31 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { raceApi } from "../api/raceApi";
-import type { RaceDetailResponse, HorseAnalysisResponse } from "../types";
+import { apiClient } from "../api/client";
+import type { RaceDetailResponse, HorseAnalysisResponse, PredictionResponse } from "../types";
 
 export const RaceDetail = () => {
     const { raceId } = useParams<{ raceId: string }>();
     const [race, setRace] = useState<RaceDetailResponse | null>(null);
     const [analysis, setAnalysis] = useState<Record<string, HorseAnalysisResponse>>({});
+    const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isPredicting, setIsPredicting] = useState(false);
     const [error, setError] = useState("");
+
+    const handlePredict = async () => {
+        if (!raceId) return;
+        setIsPredicting(true);
+        try {
+            const result = await apiClient.predictRace(raceId);
+            setPrediction(result);
+        } catch (err) {
+            console.error("Prediction failed:", err);
+            alert("Prediction failed. Please try again.");
+        } finally {
+            setIsPredicting(false);
+        }
+    };
 
     useEffect(() => {
         if (!raceId) return;
@@ -38,6 +55,10 @@ export const RaceDetail = () => {
     if (loading) return <div className="p-8 text-center text-muted">Loading race details...</div>;
     if (error || !race) return <div className="p-8 text-center text-danger">{error || "Race not found"}</div>;
 
+    const predictionMap = prediction ? Object.fromEntries(
+        prediction.predictions.map(p => [p.horse_number, p])
+    ) : {};
+
     return (
         <div className="app-container p-4 max-w-6xl mx-auto">
             {/* Header */}
@@ -62,6 +83,15 @@ export const RaceDetail = () => {
 
                 <div className="flex gap-3">
                     <Link to="/races" className="btn btn-ghost">Back to List</Link>
+
+                    <button
+                        onClick={handlePredict}
+                        disabled={isPredicting}
+                        className="btn btn-secondary px-6 flex items-center gap-2"
+                    >
+                        {isPredicting ? "Predicting..." : "Predict AI 🤖"}
+                    </button>
+
                     <Link to={`/simulation?raceId=${race.race_id}`} className="btn btn-primary px-6">
                         Start Simulation
                     </Link>
@@ -78,12 +108,15 @@ export const RaceDetail = () => {
                             <th className="p-3 text-left text-sm text-muted font-normal">Jockey</th>
                             <th className="p-3 text-right text-sm text-muted font-normal">Odds</th>
                             <th className="p-3 text-right text-sm text-muted font-normal">Prediction (Style)</th>
+                            {prediction && <th className="p-3 text-center text-sm text-muted font-normal">AI Rank</th>}
                             <th className="p-3 text-right text-sm text-muted font-normal">Result</th>
                         </tr>
                     </thead>
                     <tbody>
                         {race.entries.map((entry) => {
                             const horseAnalysis = analysis[entry.horse.horse_id];
+                            const pred = predictionMap[entry.horse_number];
+
                             return (
                                 <tr key={entry.horse_number} style={{ borderTop: "1px solid var(--color-border)" }} className="hover:bg-surface-hover transition-colors">
                                     <td className="p-3 text-center text-main font-bold">{entry.horse_number}</td>
@@ -112,10 +145,26 @@ export const RaceDetail = () => {
                                             <span className="text-muted text-xs">-</span>
                                         )}
                                     </td>
+
+                                    {prediction && (
+                                        <td className="p-3 text-center">
+                                            {pred ? (
+                                                <div className="flex flex-col items-center">
+                                                    <span className={`font-bold text-lg ${pred.predicted_rank <= 3 ? "text-warning" : "text-sub"}`}>
+                                                        {pred.mark} {pred.predicted_rank}
+                                                    </span>
+                                                    <span className="text-[10px] text-muted">
+                                                        ({pred.predicted_position.toFixed(2)})
+                                                    </span>
+                                                </div>
+                                            ) : "-"}
+                                        </td>
+                                    )}
+
                                     <td className="p-3 text-right">
                                         {entry.finish_position ? (
                                             <span className={`text-sm font-bold ${entry.finish_position === 1 ? "text-warning" :
-                                                    entry.finish_position <= 3 ? "text-primary-light" : "text-muted"
+                                                entry.finish_position <= 3 ? "text-primary-light" : "text-muted"
                                                 }`}>
                                                 {entry.finish_position}
                                             </span>

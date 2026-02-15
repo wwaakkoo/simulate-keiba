@@ -108,6 +108,7 @@ class HorseAnalysisResponse(BaseModel):
 
 class PredictionItem(BaseModel):
     """各馬の予測結果"""
+    horse_id: str
     horse_name: str
     horse_number: int
     predicted_position: float

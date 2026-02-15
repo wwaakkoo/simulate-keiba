@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 
 from bs4 import BeautifulSoup, Tag
 
+from app.scraper import VENUE_CODE_MAP
+
 
 @dataclass
 class ParsedEntryResult:
@@ -31,11 +33,6 @@ class ParsedEntryResult:
     # Optional / Compatibility fields
     passing_order: str | None = None
     last_3f: float | None = None
-    
-    # Additional fields internal to parser if needed, but keeping it clean for service.py
-    # sex: str 
-    # age: int
-    # These were used internally but service expects sex_age string, so we construct it.
 
 
 @dataclass
@@ -73,19 +70,132 @@ def parse_race_result_page(html: str, race_id: str) -> ParsedRaceResultPage:
 
     # --- 基本情報の抽出 ---
     race_name_elem = soup.select_one(".RaceName")
+    if not race_name_elem:
+        race_name_elem = soup.select_one("dl.racedata h1")
+    if not race_name_elem:
+        race_name_elem = soup.select_one(".racedata_title")
+    
     race_name = race_name_elem.get_text(strip=True) if race_name_elem else "Unknown Race"
 
-    # レース詳細
-    race_date = None
-    venue = "Tokyo" # 仮
-    course_type = "Turf" # 仮
-    distance = 2000
-    direction = "Right"
-    weather = "Fine"
-    track_condition = "Good"
-    race_class = "Open"
+    # レース詳細の抽出
+    race_data01 = soup.select_one(".RaceData01")
+    race_data02 = soup.select_one(".RaceData02")
     
-    # TODO: Extract real metadata if needed
+    # Older pages structure (e.g. 2018)
+    # <div class="data_intro">
+    #   <dl class="racedata"> ... <h1>...</h1> ... </dl>
+    #   <p class="smalltxt">...</p>
+    # </div>
+    data_intro = soup.select_one(".data_intro")
+    
+    # デフォルト値 (Japanese)
+    race_date = None
+    venue = "東京" 
+    course_type = "芝"
+    distance = 2000
+    direction = "左"
+    weather = "晴"
+    track_condition = "良"
+    race_class = "オープン"
+    
+    # 会場はrace_idから推定可能
+    if len(race_id) >= 6:
+        venue_code = race_id[4:6]
+        venue = VENUE_CODE_MAP.get(venue_code, "Unknown")
+
+    # 日付・クラス解析
+    # Modern: .smalltxt inside .RaceList_Item or similar (not always robust)
+    # Parsing logic tries .smalltxt generally
+    smalltxt = soup.select_one(".smalltxt")
+    
+    # Loop through text candidates for date/class
+    date_class_text = ""
+    if smalltxt:
+        date_class_text = smalltxt.get_text(strip=True)
+    elif data_intro:
+        # data_intro often contains the text directly or in a <p>
+        date_class_text = data_intro.get_text(strip=True)
+
+    if date_class_text:
+        text = date_class_text
+        date_match = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", text)
+        if date_match:
+            y, m, d = date_match.groups()
+            race_date = f"{y}-{m.zfill(2)}-{d.zfill(2)}"
+        
+        # クラス推定
+        if "G1" in text or "GI" in text:
+            race_class = "G1"
+        elif "G2" in text or "GII" in text:
+            race_class = "G2"
+        elif "G3" in text or "GIII" in text:
+            race_class = "G3"
+        elif "オープン" in text:
+            race_class = "オープン"
+        elif "3勝" in text or "1600万" in text:
+            race_class = "3勝クラス"
+        elif "2勝" in text or "1000万" in text:
+            race_class = "2勝クラス"
+        elif "1勝" in text or "500万" in text:
+            race_class = "1勝クラス"
+        elif "未勝利" in text:
+            race_class = "未勝利"
+        elif "新馬" in text:
+            race_class = "新馬"
+
+    # 詳細情報 (距離, 天候, 馬場) 解析
+    # Modern: .RaceData01
+    # Older: .data_intro text (often mixed with date)
+    detail_text = ""
+    if race_data01:
+        detail_text += race_data01.get_text(strip=True)
+    if data_intro:
+        detail_text += " " + data_intro.get_text(strip=True)
+        
+    if detail_text:
+        text = detail_text
+        
+        # 距離・コース
+        dist_match = re.search(r"(芝|ダ|障)(\d+)", text)
+        if dist_match:
+            ctype_jp = dist_match.group(1)
+            distance = int(dist_match.group(2))
+            if ctype_jp == "ダ":
+                course_type = "ダート"
+            elif ctype_jp == "障":
+                course_type = "障害"
+            else:
+                course_type = "芝"
+        
+        # 方向
+        if "右" in text:
+            direction = "右"
+        elif "左" in text:
+            direction = "左"
+        elif "直" in text:
+            direction = "直線"
+            
+        # 天候
+        if "天候:晴" in text or "天候 : 晴" in text:
+            weather = "晴"
+        elif "天候:曇" in text or "天候 : 曇" in text:
+            weather = "曇"
+        elif "天候:雨" in text or "天候 : 雨" in text:
+            weather = "雨"
+        elif "天候:小雨" in text or "天候 : 小雨" in text:
+            weather = "小雨"
+        elif "天候:雪" in text or "天候 : 雪" in text:
+            weather = "雪"
+            
+        # 馬場状態
+        if "良" in text:
+            track_condition = "良"
+        elif "稍重" in text: 
+            track_condition = "稍重"
+        elif "重" in text:
+            track_condition = "重"
+        elif "不良" in text:
+            track_condition = "不良"
 
     entries = _parse_result_table(soup)
     num_entries = len(entries)
@@ -125,24 +235,56 @@ def _parse_result_table(soup: BeautifulSoup) -> list[ParsedEntryResult]:
 
     rows = table.select("tr")
     
-    data_rows = rows[1:]  # ヘッダー行をスキップ
+    # Header parsing
+    header_row = rows[0]
+    headers = [th.get_text(strip=True) for th in header_row.select("th, td")]
+    
+    col_map = {}
+    for i, h in enumerate(headers):
+        if "着順" in h: col_map["finish_position"] = i
+        elif "枠番" in h: col_map["bracket_number"] = i
+        elif "馬番" in h: col_map["horse_number"] = i
+        elif "馬名" in h: col_map["horse_name"] = i
+        elif "性齢" in h: col_map["sex_age"] = i
+        elif "斤量" in h: col_map["weight_carried"] = i
+        elif "騎手" in h: col_map["jockey"] = i
+        elif "タイム" in h: col_map["finish_time"] = i
+        elif "着差" in h: col_map["margin"] = i
+        elif "人気" in h: col_map["popularity"] = i
+        elif "オッズ" in h or "単勝" in h: col_map["odds"] = i
+        elif "後3F" in h or "上り" in h: col_map["last_3f"] = i
+        elif "通過" in h: col_map["passing_order"] = i
+        elif "厩舎" in h or "調教師" in h: col_map["trainer"] = i
+        elif "馬体重" in h: col_map["horse_weight"] = i
+        
+    data_rows = rows[1:]
     for row in data_rows:
-        entry = _parse_result_row(row)
+        entry = _parse_result_row(row, col_map)
         if entry:
             entries.append(entry)
 
     return entries
 
 
-def _parse_result_row(row: Tag) -> ParsedEntryResult | None:
+def _parse_result_row(row: Tag, col_map: dict[str, int]) -> ParsedEntryResult | None:
     """結果テーブルの1行をパースする"""
     cells = row.select("td")
-    if len(cells) < 10:
+    if not cells:
         return None
 
     try:
+        def get_cell(key: str, default_idx: int) -> Tag | None:
+            idx = col_map.get(key, default_idx)
+            if 0 <= idx < len(cells):
+                return cells[idx]
+            return None
+            
+        def get_text(key: str, default_idx: int) -> str:
+            cell = get_cell(key, default_idx)
+            return cell.get_text(strip=True) if cell else ""
+
         # 着順とステータス
-        finish_pos_text = cells[0].get_text(strip=True)
+        finish_pos_text = get_text("finish_position", 0)
         status = "result"
         finish_position: int | None = None
         
@@ -159,12 +301,11 @@ def _parse_result_row(row: Tag) -> ParsedEntryResult | None:
                 pass
 
         # 枠番
-        bracket_number = _safe_int(cells[1].get_text(strip=True))
+        bracket_number = _safe_int(get_text("bracket_number", 1))
 
         # 馬番
         horse_number_val = None
-        raw_horse_num = cells[2].get_text(strip=True)
-        # 数字のみ抽出して変換
+        raw_horse_num = get_text("horse_number", 2)
         num_match = re.search(r"\d+", raw_horse_num)
         if num_match:
             horse_number_val = int(num_match.group(0))
@@ -173,70 +314,92 @@ def _parse_result_row(row: Tag) -> ParsedEntryResult | None:
             return None
 
         # 馬名・馬ID
-        horse_name_elem = cells[3].select_one("a")
+        horse_cell = get_cell("horse_name", 3)
         horse_name = ""
         horse_id = ""
-        if horse_name_elem:
-            horse_name = horse_name_elem.get_text(strip=True)
-            href = horse_name_elem.get("href")
-            if isinstance(href, str):
-                match = re.search(r"/horse/(\d+)", href)
-                if match:
-                    horse_id = match.group(1)
+        if horse_cell:
+            horse_name_elem = horse_cell.select_one("a")
+            if horse_name_elem:
+                horse_name = horse_name_elem.get_text(strip=True)
+                href = horse_name_elem.get("href")
+                if isinstance(href, str):
+                    match = re.search(r"/horse/(\d+)", href)
+                    if match:
+                        horse_id = match.group(1)
+            else:
+                horse_name = horse_cell.get_text(strip=True)
         
         # 性齢
-        sex_age = cells[4].get_text(strip=True) # "牡3"
+        sex_age = get_text("sex_age", 4)
         
         # 斤量
-        weight_carried = _safe_float(cells[5].get_text(strip=True)) or 55.0
+        weight_carried = _safe_float(get_text("weight_carried", 5)) or 55.0
 
         # 騎手
-        jockey_elem = cells[6].select_one("a")
+        jockey_cell = get_cell("jockey", 6)
         jockey = ""
-        # jockey_id unused in current ParsedEntryResult but extracted if needed
-        if jockey_elem:
-            jockey = jockey_elem.get_text(strip=True)
+        if jockey_cell:
+            jockey_elem = jockey_cell.select_one("a")
+            if jockey_elem:
+                jockey = jockey_elem.get_text(strip=True)
+            else:
+                jockey = jockey_cell.get_text(strip=True)
 
         # タイム
-        finish_time = cells[7].get_text(strip=True)
+        finish_time = get_text("finish_time", 7)
         if not finish_time:
             finish_time = None
 
         # 着差
-        margin = cells[8].get_text(strip=True)
+        margin = get_text("margin", 8)
         
         # 人気
-        popularity = _safe_int(cells[9].get_text(strip=True))
+        popularity = _safe_int(get_text("popularity", 9))
         
         # オッズ
-        odds = _safe_float(cells[10].get_text(strip=True))
+        odds = _safe_float(get_text("odds", 10))
         
-        passing_order = None 
-        last_3f = None
+        # Last 3F (New)
+        last_3f_text = get_text("last_3f", 11) # Default to 11 if not mapped
+        last_3f = _safe_float(last_3f_text) if last_3f_text else None
+
+        # Passing order
+        passing_order = get_text("passing_order", 12) or None
+        if passing_order == "": passing_order = None
 
         # 調教師
+        trainer_cell = get_cell("trainer", 13)
         trainer = ""
-        if len(cells) > 13:
-             trainer_elem = cells[13].select_one("a")
-             if trainer_elem:
-                 trainer = trainer_elem.get_text(strip=True)
+        if trainer_cell:
+            trainer_elem = trainer_cell.select_one("a")
+            if trainer_elem:
+                trainer = trainer_elem.get_text(strip=True)
+            else:
+                trainer = trainer_cell.get_text(strip=True)
 
         # 馬体重
+        # Default index depends on whether passing_order/last_3f exist
+        # But we use checks.
+        # If headers are present, col_map["horse_weight"] will be correct.
+        # If not, we try 14 (standard) or scan
+        hw_text = get_text("horse_weight", 14)
         horse_weight = None
         horse_weight_diff = None
         
-        if len(cells) > 11:
-             hw_text = cells[11].get_text(strip=True)
-             if hw_text and hw_text != "計不":
-                 match = re.search(r"(\d+)\(([-+]?\d+)\)", hw_text)
-                 if match:
-                     horse_weight = float(match.group(1))
-                     horse_weight_diff = int(match.group(2))
-                 else:
-                     try:
-                         horse_weight = float(hw_text)
-                     except:
-                         pass
+        if hw_text and hw_text != "計不":
+             match = re.search(r"(\d+)\(([-+]?\d+)\)", hw_text)
+             if match:
+                 horse_weight = float(match.group(1))
+                 horse_weight_diff = int(match.group(2))
+             else:
+                 # Fallback for simple number (though rare for weight)
+                 # Should differentiate from last_3f (e.g. > 300)
+                 try:
+                     val = float(hw_text)
+                     if val > 100: # Weight is usually 400-500
+                        horse_weight = val
+                 except:
+                     pass
 
         return ParsedEntryResult(
             finish_position=finish_position,

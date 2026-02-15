@@ -22,6 +22,7 @@ class FeatureFactory:
         features_list = []
         horse_names = []
         horse_numbers = []
+        horse_ids = []
         
         for entry in entries:
             features = self._generate_horse_features(entry, race)
@@ -36,11 +37,13 @@ class FeatureFactory:
             
             horse_names.append(horse_name)
             horse_numbers.append(entry.horse_number)
+            horse_ids.append(entry.horse.horse_id)
         
         return {
             'features': features_list,
             'horse_names': horse_names,
-            'horse_numbers': horse_numbers
+            'horse_numbers': horse_numbers,
+            'horse_ids': horse_ids
         }
     
     def _generate_horse_features(self, entry: RaceEntry, race: Race) -> List[float]:

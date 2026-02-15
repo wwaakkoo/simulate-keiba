@@ -1,4 +1,5 @@
 export interface PredictionItem {
+    horse_id: string;
     horse_name: string;
     horse_number: number;
     predicted_position: number;

@@ -71,6 +71,7 @@ def _predict_sync(race_id_str: str) -> dict:
             mark = marks[rank_map[i]] if rank_map[i] < len(marks) else ""
             
             item = PredictionItem(
+                horse_id=result['horse_ids'][i],
                 horse_name=result['horse_names'][i],
                 horse_number=result['horse_numbers'][i],
                 predicted_position=float(predictions[i]),
