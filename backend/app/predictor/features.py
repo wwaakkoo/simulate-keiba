@@ -4,6 +4,7 @@ from app.models.race import Race
 from app.models.race_entry import RaceEntry
 from app.models.horse import Horse
 from app.predictor.logic import determine_running_style, RunningStyle
+from app.predictor.speed_index import SpeedIndexCalculator
 import numpy as np
 import re
 
@@ -13,6 +14,7 @@ class FeatureFactory:
     def __init__(self, db: Session):
         self.db = db
         self.jockey_stats_cache = {} # Cache for jockey stats within a session
+        self.speed_calculator = SpeedIndexCalculator(db)
     
     def generate_features_for_race(self, race_id: int) -> Dict[str, Any]:
         """レース全体の特徴量を生成"""
@@ -235,6 +237,30 @@ class FeatureFactory:
                 except:
                     pass
 
+        # === Phase F: Advanced Features ===
+        
+        # 13. Speed Index
+        speed_index = self.speed_calculator.calculate_for_entry(entry, race)
+        
+        # 14. Dark Horse Features
+        
+        # Comeback Flag (前走大敗フラグ)
+        comeback_flag = 0.0
+        if past_entries:
+            prev_race_entry = past_entries[0]
+            if prev_race_entry.finish_position and prev_race_entry.finish_position >= 10:
+                comeback_flag = 1.0
+                
+        # Odds Divergence (Odds / Odds Rank)
+        # If the horse is 1st popular (rank=1) but odds are 3.0, divergence = 3.0
+        # If 10th popular (rank=10) and odds are 100.0, divergence = 10.0
+        # High value might indicate "undervalued" or just "very unlikely"
+        # User defined: odds / popularity
+        odds_divergence = odds / max(1.0, odds_rank)
+        
+        # Rest Flag (Long Layoff)
+        rest_flag = 1.0 if rotation_days >= 90.0 else 0.0
+
         return [
             avg_position_all,
             avg_position_recent3,
@@ -261,7 +287,12 @@ class FeatureFactory:
             age,
             sex_encoded,
             weight_diff_vs_avg,
-            distance_aptitude
+            distance_aptitude,
+            # Phase F
+            speed_index or 0.0,
+            comeback_flag,
+            odds_divergence,
+            rest_flag
         ]
     
     @staticmethod
@@ -291,5 +322,9 @@ class FeatureFactory:
             'age',
             'sex_encoded',
             'weight_diff_vs_avg',
-            'distance_aptitude'
+            'distance_aptitude',
+            'speed_index',
+            'comeback_flag',
+            'odds_divergence',
+            'rest_flag'
         ]
