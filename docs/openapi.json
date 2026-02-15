@@ -1,0 +1,1031 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "競馬シミュレーションAPI",
+    "description": "競馬のレースデータ収集・予測・シミュレーションを行うAPI",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/scrape": {
+      "post": {
+        "summary": "Scrape Races",
+        "description": "指定日のレースデータを収集する",
+        "operationId": "scrape_races_api_scrape_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScrapeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scrape/race": {
+      "post": {
+        "summary": "Scrape Single Race",
+        "description": "単一レースのデータを収集する",
+        "operationId": "scrape_single_race_api_scrape_race_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScrapeRaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/races": {
+      "get": {
+        "summary": "List Races",
+        "description": "レース一覧を取得する",
+        "operationId": "list_races_api_races_get",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "開始日",
+              "title": "Date From"
+            },
+            "description": "開始日"
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "終了日",
+              "title": "Date To"
+            },
+            "description": "終了日"
+          },
+          {
+            "name": "venue",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "会場名",
+              "title": "Venue"
+            },
+            "description": "会場名"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RaceListItem"
+                  },
+                  "title": "Response List Races Api Races Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/races/{race_id}": {
+      "get": {
+        "summary": "Get Race Detail",
+        "description": "レース詳細（出走馬・結果含む）を取得する",
+        "operationId": "get_race_detail_api_races__race_id__get",
+        "parameters": [
+          {
+            "name": "race_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Race Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RaceDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/horses/{horse_id}": {
+      "get": {
+        "summary": "Get Horse",
+        "description": "馬の詳細情報を取得する",
+        "operationId": "get_horse_api_horses__horse_id__get",
+        "parameters": [
+          {
+            "name": "horse_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Horse Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HorseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/races/{race_id}/analysis": {
+      "get": {
+        "summary": "Analyze Race Horses",
+        "description": "レースに出走する全馬の分析データを一括取得する",
+        "operationId": "analyze_race_horses_api_races__race_id__analysis_get",
+        "parameters": [
+          {
+            "name": "race_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Race Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/HorseAnalysisResponse"
+                  },
+                  "title": "Response Analyze Race Horses Api Races  Race Id  Analysis Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/horses/{horse_id}": {
+      "get": {
+        "summary": "Analyze Horse Stats",
+        "description": "馬の傾向分析（脚質など）を取得する",
+        "operationId": "analyze_horse_stats_api_analysis_horses__horse_id__get",
+        "parameters": [
+          {
+            "name": "horse_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Horse Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HorseAnalysisResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/races/{race_id}/predict": {
+      "post": {
+        "tags": [
+          "predictions"
+        ],
+        "summary": "Predict Race",
+        "description": "指定レースの着順をAIで予測する",
+        "operationId": "predict_race_api_races__race_id__predict_post",
+        "parameters": [
+          {
+            "name": "race_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Race Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "ヘルスチェックエンドポイント",
+        "operationId": "health_check_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Check Api Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EntryResponse": {
+        "properties": {
+          "horse_number": {
+            "type": "integer",
+            "title": "Horse Number"
+          },
+          "bracket_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bracket Number"
+          },
+          "horse": {
+            "$ref": "#/components/schemas/HorseResponse"
+          },
+          "jockey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jockey"
+          },
+          "weight_carried": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Carried"
+          },
+          "odds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Odds"
+          },
+          "popularity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Popularity"
+          },
+          "finish_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finish Position"
+          },
+          "finish_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finish Time"
+          },
+          "margin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin"
+          },
+          "passing_order": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passing Order"
+          },
+          "last_3f": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last 3F"
+          },
+          "horse_weight": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horse Weight"
+          },
+          "horse_weight_diff": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horse Weight Diff"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "horse_number",
+          "horse"
+        ],
+        "title": "EntryResponse",
+        "description": "出走記録レスポンス"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HorseAnalysisResponse": {
+        "properties": {
+          "horse_id": {
+            "type": "string",
+            "title": "Horse Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": ""
+          },
+          "style": {
+            "type": "string",
+            "title": "Style"
+          },
+          "stats": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Stats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "horse_id",
+          "style",
+          "stats"
+        ],
+        "title": "HorseAnalysisResponse"
+      },
+      "HorseResponse": {
+        "properties": {
+          "horse_id": {
+            "type": "string",
+            "title": "Horse Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "sex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sex"
+          },
+          "trainer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trainer"
+          },
+          "sire": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sire"
+          },
+          "dam": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dam"
+          }
+        },
+        "type": "object",
+        "required": [
+          "horse_id",
+          "name"
+        ],
+        "title": "HorseResponse",
+        "description": "馬情報レスポンス"
+      },
+      "PredictionItem": {
+        "properties": {
+          "horse_id": {
+            "type": "string",
+            "title": "Horse Id"
+          },
+          "horse_name": {
+            "type": "string",
+            "title": "Horse Name"
+          },
+          "horse_number": {
+            "type": "integer",
+            "title": "Horse Number"
+          },
+          "predicted_position": {
+            "type": "number",
+            "title": "Predicted Position"
+          },
+          "predicted_rank": {
+            "type": "integer",
+            "title": "Predicted Rank"
+          },
+          "mark": {
+            "type": "string",
+            "title": "Mark"
+          }
+        },
+        "type": "object",
+        "required": [
+          "horse_id",
+          "horse_name",
+          "horse_number",
+          "predicted_position",
+          "predicted_rank",
+          "mark"
+        ],
+        "title": "PredictionItem",
+        "description": "各馬の予測結果"
+      },
+      "PredictionResponse": {
+        "properties": {
+          "race_id": {
+            "type": "string",
+            "title": "Race Id"
+          },
+          "predictions": {
+            "items": {
+              "$ref": "#/components/schemas/PredictionItem"
+            },
+            "type": "array",
+            "title": "Predictions"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          }
+        },
+        "type": "object",
+        "required": [
+          "race_id",
+          "predictions",
+          "model_version",
+          "method"
+        ],
+        "title": "PredictionResponse",
+        "description": "予測APIレスポンス"
+      },
+      "RaceDetailResponse": {
+        "properties": {
+          "race_id": {
+            "type": "string",
+            "title": "Race Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "venue": {
+            "type": "string",
+            "title": "Venue"
+          },
+          "course_type": {
+            "type": "string",
+            "title": "Course Type"
+          },
+          "distance": {
+            "type": "integer",
+            "title": "Distance"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "weather": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weather"
+          },
+          "track_condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Condition"
+          },
+          "race_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Race Class"
+          },
+          "num_entries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Entries"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/EntryResponse"
+            },
+            "type": "array",
+            "title": "Entries",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "race_id",
+          "name",
+          "date",
+          "venue",
+          "course_type",
+          "distance"
+        ],
+        "title": "RaceDetailResponse",
+        "description": "レース詳細レスポンス"
+      },
+      "RaceListItem": {
+        "properties": {
+          "race_id": {
+            "type": "string",
+            "title": "Race Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "venue": {
+            "type": "string",
+            "title": "Venue"
+          },
+          "course_type": {
+            "type": "string",
+            "title": "Course Type"
+          },
+          "distance": {
+            "type": "integer",
+            "title": "Distance"
+          },
+          "track_condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Condition"
+          },
+          "race_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Race Class"
+          },
+          "num_entries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "race_id",
+          "name",
+          "date",
+          "venue",
+          "course_type",
+          "distance"
+        ],
+        "title": "RaceListItem",
+        "description": "レース一覧の各レース"
+      },
+      "ScrapeRaceRequest": {
+        "properties": {
+          "race_id": {
+            "type": "string",
+            "pattern": "^\\d{12}$",
+            "title": "Race Id",
+            "description": "レースID (12桁)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "race_id"
+        ],
+        "title": "ScrapeRaceRequest",
+        "description": "単一レースのスクレイプリクエスト"
+      },
+      "ScrapeRequest": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{8}$",
+            "title": "Date",
+            "description": "日付 (YYYYMMDD形式)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date"
+        ],
+        "title": "ScrapeRequest",
+        "description": "スクレイプリクエスト"
+      },
+      "ScrapeResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "new": {
+            "type": "integer",
+            "title": "New"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped"
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors"
+          },
+          "race_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Race Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "new",
+          "skipped",
+          "errors",
+          "race_ids"
+        ],
+        "title": "ScrapeResponse",
+        "description": "スクレイプ結果"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

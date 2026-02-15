@@ -142,6 +142,15 @@ simulate-keiba/
 - 未テストコードのマージ
 - セキュリティリスクのある外部パッケージ使用
 
+### 🚫 AI読み込み推奨外ファイル (No-Go Zone)
+以下のファイルはAIのコンテキストを圧迫するため、指示がない限り読み込まないでください:
+- `frontend/package-lock.json`
+- `backend/uv.lock`
+- `frontend/dist/*`
+- `backend/.venv/*`
+- `data/*.sqlite`
+- `**/*.png`, `**/*.svg` (画像ファイル)
+
 ---
 
 ## コミット規約

@@ -21,6 +21,30 @@
 - 📊 **データ収集**: netkeiba.comからレースデータを自動収集
 - 📈 **結果分析**: 予測 vs 実際の結果を比較して精度改善
 
+## 🏃 使い方の流れ (データの取得と予測)
+
+特定のレースを予測・シミュレーションしたい場合は、以下の手順で行います。
+
+### 1. レースIDを確認する
+netkeibaのURLから取得したいレースのID（12桁の数字）を探します。  
+例: `https://db.netkeiba.com/race/202406050811/` の場合、IDは `202406050811` です。
+
+### 2. レースデータの取得 (Scrape)
+ターミナルまたはブラウザのSwagger UIから、データをDBに取り込みます。
+```bash
+curl -X POST http://localhost:8000/api/scrape/race -H "Content-Type: application/json" -d "{\"race_id\": \"202406050811\"}"
+```
+
+### 3. AI予測の実行 (Predict)
+データ取得後、以下のAPIを叩くとAIの予測結果（印やスコア）が返ってきます。
+```bash
+curl -X POST http://localhost:8000/api/races/202406050811/predict
+```
+
+### 4. 画面での表示
+ブラウザで以下のURLにアクセスすると、予測結果の確認とシミュレーションが可能です。  
+`http://localhost:5173/races/任意のレースID`
+
 ---
 
 ## 🛠️ 技術スタック
